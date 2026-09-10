@@ -1,0 +1,27 @@
+appId: com.luis.liquidtodo
+productName: Liquid Todo
+directories:
+  buildResources: resources
+  output: release
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: resources/desktop-layer.ps1
+    to: desktop-layer.ps1
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.png
+  artifactName: Liquid Todo Setup ${version}.exe
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Liquid Todo
+  deleteAppDataOnUninstall: false

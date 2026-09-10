@@ -1,0 +1,60 @@
+:root {
+  --font: 'Inter Variable', 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --radius-panel: 30px;
+  --radius-row: 16px;
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.18);
+  --text-primary: rgba(12, 16, 26, 0.92);
+  --text-secondary: rgba(12, 16, 26, 0.6);
+  --text-muted: rgba(12, 16, 26, 0.4);
+  --panel-shadow: 0 26px 48px -22px rgba(8, 12, 24, 0.5), 0 3px 10px -4px rgba(8, 12, 24, 0.28);
+}
+
+:root[data-theme='dark'] {
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.68);
+  --text-muted: rgba(255, 255, 255, 0.44);
+  --panel-shadow: 0 26px 48px -22px rgba(0, 0, 0, 0.6), 0 3px 10px -4px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input {
+  font: inherit;
+  user-select: text;
+}
+
+.glass-filters {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}

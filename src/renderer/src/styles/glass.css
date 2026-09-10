@@ -1,0 +1,155 @@
+.glass {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.glass__wallpaper {
+  position: absolute;
+  border-radius: inherit;
+}
+
+/* Live mode: the desktop is streamed underneath the page, so the glass blurs the
+   real background (animated wallpapers included) with a plain backdrop filter. */
+.glass__blur {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  backdrop-filter: blur(26px) saturate(190%) brightness(1.06);
+  -webkit-backdrop-filter: blur(26px) saturate(190%) brightness(1.06);
+}
+
+.glass__lens {
+  position: absolute;
+  inset: 0;
+  border: 15px solid transparent;
+  border-radius: inherit;
+  backdrop-filter: blur(5px) saturate(175%) brightness(1.08);
+  -webkit-backdrop-filter: blur(5px) saturate(175%) brightness(1.08);
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: border-box, padding-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: border-box, padding-box;
+  mask-composite: exclude;
+}
+
+.live-backdrop {
+  position: absolute;
+  z-index: 0;
+  display: block;
+  object-fit: cover;
+  pointer-events: none;
+  background: transparent;
+}
+
+/* Blurred copy of the wallpaper sitting directly behind the panel. */
+.glass__wallpaper--blur {
+  inset: -72px;
+  filter: blur(26px) saturate(190%) brightness(1.06);
+}
+
+/* Same wallpaper, masked to the outer ring and pushed through a displacement filter,
+   which produces the liquid-glass lensing along the edges. */
+.glass__wallpaper--refract {
+  inset: 0;
+  border: 16px solid transparent;
+  filter: url('#liquid-refraction') blur(1.4px) saturate(150%);
+  opacity: 0.92;
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: border-box, padding-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: border-box, padding-box;
+  mask-composite: exclude;
+}
+
+.glass__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    158deg,
+    rgba(255, 255, 255, 0.3) 0%,
+    rgba(255, 255, 255, 0.18) 45%,
+    rgba(255, 255, 255, 0.1) 100%
+  );
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.5),
+    inset 0 -1px 2px rgba(12, 18, 32, 0.06),
+    inset 0 0 48px rgba(255, 255, 255, 0.05);
+}
+
+:root[data-theme='dark'] .glass__fill {
+  background: linear-gradient(
+    158deg,
+    rgba(40, 44, 56, 0.3) 0%,
+    rgba(26, 29, 38, 0.2) 46%,
+    rgba(16, 18, 25, 0.14) 100%
+  );
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.16),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.24),
+    inset 0 0 48px rgba(255, 255, 255, 0.03);
+}
+
+.glass__spec {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(140% 70% at 8% -14%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 62%),
+    linear-gradient(118deg, rgba(255, 255, 255, 0.38) 0 14%, rgba(255, 255, 255, 0) 34%),
+    radial-gradient(90% 50% at 100% 108%, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 62%);
+  mix-blend-mode: screen;
+  opacity: 0.42;
+}
+
+:root[data-theme='dark'] .glass__spec {
+  opacity: 0.28;
+}
+
+.glass__rim,
+.glass__accent {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.glass__rim {
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.92),
+    rgba(255, 255, 255, 0.24) 32%,
+    rgba(255, 255, 255, 0.06) 58%,
+    rgba(255, 255, 255, 0.6) 100%
+  );
+}
+
+.glass__accent {
+  background: linear-gradient(
+    160deg,
+    rgba(10, 132, 255, 0.7),
+    rgba(10, 132, 255, 0) 46%,
+    rgba(10, 132, 255, 0.4) 100%
+  );
+  opacity: 0.5;
+}
+
+.glass__grain {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
