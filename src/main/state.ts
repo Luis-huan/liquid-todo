@@ -131,9 +131,9 @@ export class TodoState {
     return {
       todayKey,
       columns: [
-        this.column('yesterday', 'yesterday', addDays(todayKey, -1), true),
-        this.column('today', 'today', todayKey, false),
-        this.column('nextDay', 'next day', addDays(todayKey, 1), false)
+        this.column('yesterday', 'Yesterday', addDays(todayKey, -1), true),
+        this.column('today', 'Today', todayKey, false),
+        this.column('nextDay', 'Next day', addDays(todayKey, 1), false)
       ],
       theme: 'light',
       desktopLayer: this.desktopLayer,

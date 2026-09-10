@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { app, BrowserWindow, desktopCapturer, nativeTheme, powerMonitor, screen, session } from 'electron'
-import type { BackdropMode, DesktopLayerRequest, ResolvedTheme, ThemeMode } from '../shared/types'
+import type { BackdropMode, DesktopLayerRequest, ResolvedTheme, Snapshot, ThemeMode } from '../shared/types'
 import { applyDesktopLayer } from './desktopLayer'
 import { registerIpc } from './ipc'
 import { TodoState } from './state'
@@ -66,15 +66,25 @@ function resolveTheme(): ResolvedTheme {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
 }
 
-function broadcast(): void {
-  if (!state) return
+/**
+ * Samples the desktop under the frame of the window that asked for it, so each window
+ * blurs exactly what sits behind itself instead of copying the main window's slice.
+ */
+function snapshotFor(win: BrowserWindow | null): Snapshot {
+  if (!state) throw new Error('state not ready')
   const snapshot = state.snapshot()
-  snapshot.backdrop = buildBackdrop(mainWindow)
+  snapshot.backdrop = buildBackdrop(win)
   snapshot.theme = resolveTheme()
   snapshot.settings = { ...snapshot.settings, backdrop: effectiveBackdrop() }
-  const payload = { snapshot, history: state.history() }
+  return snapshot
+}
+
+function broadcast(): void {
+  if (!state) return
+  const history = state.history()
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('state:changed', payload)
+    if (win.isDestroyed()) continue
+    win.webContents.send('state:changed', { snapshot: snapshotFor(win), history })
   }
 }
 
@@ -195,6 +205,7 @@ async function bootstrap(): Promise<void> {
 
   registerIpc({
     state,
+    snapshotFor,
     openHistory,
     closeHistory: () => historyWindow?.close(),
     refreshBackdrop,

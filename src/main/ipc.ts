@@ -1,5 +1,5 @@
 import { app, BrowserWindow, desktopCapturer, ipcMain, screen, type IpcMainInvokeEvent } from 'electron'
-import type { DateKey, Rect, ResizeAnchor, Settings } from '../shared/types'
+import type { DateKey, Rect, ResizeAnchor, Settings, Snapshot } from '../shared/types'
 import { MAIN_MIN_SIZE, HISTORY_MIN_SIZE } from './windows'
 import { windowRole } from './windowRoles'
 import type { TodoState } from './state'
@@ -14,6 +14,7 @@ const sessions = new Map<number, DragSession>()
 
 export interface IpcContext {
   state: TodoState
+  snapshotFor: (win: BrowserWindow | null) => Snapshot
   openHistory: () => void
   closeHistory: () => void
   refreshBackdrop: () => Promise<void>
@@ -60,7 +61,7 @@ function computeResize(
 export function registerIpc(context: IpcContext): void {
   const { state } = context
 
-  ipcMain.handle('state:get', () => context.state.snapshot())
+  ipcMain.handle('state:get', (event) => context.snapshotFor(senderWindow(event)))
   ipcMain.handle('history:get', () => context.state.history())
   ipcMain.handle('history:open', () => context.openHistory())
   ipcMain.handle('history:close', () => context.closeHistory())
