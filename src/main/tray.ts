@@ -1,7 +1,7 @@
 import { app, Menu, nativeImage, Tray } from 'electron'
 import { resourcePath } from './paths'
 import type { TodoState } from './state'
-import type { BackdropMode, ThemeMode } from '../shared/types'
+import type { ThemeMode } from '../shared/types'
 
 export interface TrayActions {
   toggleVisibility: () => void
@@ -12,7 +12,6 @@ export interface TrayActions {
   setAlwaysOnTop: (value: boolean) => void
   isAlwaysOnTop: () => boolean
   setTheme: (theme: ThemeMode) => void
-  setBackdrop: (mode: BackdropMode) => void
 }
 
 let tray: Tray | null = null
@@ -34,8 +33,7 @@ export function createTray(state: TodoState, actions: TrayActions): Tray {
       state.settings.desktopLayer,
       actions.isAlwaysOnTop(),
       state.settings.startAtLogin,
-      state.settings.theme,
-      state.settings.backdrop
+      state.settings.theme
     ].join('|')
     if (next === signature) return
     signature = next
@@ -61,15 +59,6 @@ export function createTray(state: TodoState, actions: TrayActions): Tray {
         type: 'checkbox',
         checked: actions.isAlwaysOnTop(),
         click: (item) => actions.setAlwaysOnTop(item.checked)
-      },
-      {
-        label: 'Live desktop backdrop',
-        type: 'checkbox',
-        checked: state.settings.backdrop === 'live',
-        click: (item) => {
-          actions.setBackdrop(item.checked ? 'live' : 'wallpaper')
-          render()
-        }
       },
       {
         label: 'Glass look',

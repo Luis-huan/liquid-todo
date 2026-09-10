@@ -13,10 +13,10 @@ import {
 import type { ColumnView, Snapshot, Task } from '../../shared/types'
 import { api } from './api'
 import { ColumnPanel } from './components/ColumnPanel'
-import { GlassFilters, LiveBackdropVideo } from './components/GlassSurface'
+import { GlassFilters } from './components/GlassSurface'
+
 import { ResizeHandles } from './components/ResizeHandles'
 import { TaskPreview } from './components/TaskRow'
-import { useLiveBackdrop } from './hooks/useLiveBackdrop'
 import { useWindowFrame } from './hooks/useWindowFrame'
 import type { ImageSize } from './wallpaper'
 
@@ -35,7 +35,6 @@ export default function App() {
     min: MAIN_MIN,
     fallback: FALLBACK_DISPLAY
   })
-  const live = useLiveBackdrop(snapshot)
 
   const applySnapshot = useCallback(
     (next: Snapshot) => {
@@ -73,15 +72,7 @@ export default function App() {
     if (snapshot) document.documentElement.dataset.theme = snapshot.theme
   }, [snapshot])
 
-  const liveFallback =
-    live.status === 'unavailable' && snapshot?.settings.backdrop === 'live'
-      ? {
-          id: -99,
-          kind: 'warn' as const,
-          text: 'Live backdrop is unavailable, so the saved wallpaper is used instead.'
-        }
-      : null
-  const notice = snapshot?.notice ?? liveFallback
+  const notice = snapshot?.notice ?? null
   useEffect(() => {
     if (!notice) {
       setNoticeVisible(null)
@@ -198,14 +189,7 @@ export default function App() {
   return (
     <div className="widget" data-ready={snapshot ? 'true' : 'false'}>
       <GlassFilters />
-      {live.status === 'live' || live.status === 'connecting' ? (
-        <LiveBackdropVideo
-          videoRef={live.videoRef}
-          windowBounds={bounds ?? backdrop.windowBounds}
-          backdrop={backdrop}
-        />
-      ) : null}
-      <DndContext
+            <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={onDragStart}
@@ -222,7 +206,6 @@ export default function App() {
               image={image}
               windowBounds={bounds ?? backdrop.windowBounds}
               accent={column.id === 'today'}
-              live={live.status === 'live'}
               onHeaderPointerDown={beginDrag}
               onToggle={toggleTask}
               onDelete={deleteTask}

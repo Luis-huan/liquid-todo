@@ -14,7 +14,6 @@ const api: LiquidTodoApi = {
   getHistory: () => ipcRenderer.invoke('history:get') as Promise<HistoryPayload>,
   patchSettings: (patch: Partial<Settings>) => ipcRenderer.invoke('settings:patch', patch),
   refreshBackdrop: () => ipcRenderer.invoke('backdrop:refresh'),
-  getCaptureSource: () => ipcRenderer.invoke('capture:source') as Promise<string | null>,
   openHistory: () => ipcRenderer.invoke('history:open'),
   closeHistory: () => ipcRenderer.invoke('history:close'),
   quit: () => ipcRenderer.invoke('app:quit'),

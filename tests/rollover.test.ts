@@ -144,7 +144,6 @@ describe('store normalisation', () => {
   it('creates a complete default store', () => {
     const store = createEmptyStore('2026-09-10')
     expect(store.version).toBe(3)
-    expect(store.settings.backdrop).toBe('wallpaper')
     expect(store.days).toEqual({})
     expect(store.settings.theme).toBe('system')
     expect(store.settings.mainWindow.width).toBe(760)

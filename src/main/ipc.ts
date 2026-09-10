@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain, screen, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, type IpcMainInvokeEvent } from 'electron'
 import type { DateKey, Rect, ResizeAnchor, Settings, Snapshot } from '../shared/types'
 import { MAIN_MIN_SIZE, HISTORY_MIN_SIZE } from './windows'
 import { windowRole } from './windowRoles'
@@ -66,17 +66,6 @@ export function registerIpc(context: IpcContext): void {
   ipcMain.handle('history:open', () => context.openHistory())
   ipcMain.handle('history:close', () => context.closeHistory())
   ipcMain.handle('backdrop:refresh', () => context.refreshBackdrop())
-  ipcMain.handle('capture:source', async (event) => {
-    const win = senderWindow(event)
-    const display = win ? screen.getDisplayMatching(win.getBounds()) : screen.getPrimaryDisplay()
-    try {
-      const sources = await desktopCapturer.getSources({ types: ['screen'] })
-      const source = sources.find((entry) => entry.display_id === String(display.id)) ?? sources[0]
-      return source?.id ?? null
-    } catch {
-      return null
-    }
-  })
   ipcMain.handle('app:quit', () => app.quit())
 
   ipcMain.handle('task:add', (_event, dateKey: DateKey, text: string) => {

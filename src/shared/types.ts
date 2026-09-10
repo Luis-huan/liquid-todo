@@ -4,7 +4,6 @@ export type ResolvedTheme = 'light' | 'dark'
 export type DesktopLayerRequest = 'auto' | 'workerw' | 'bottom'
 export type DesktopLayerResolved = 'workerw' | 'bottom'
 export type WallpaperFit = 'fill' | 'fit' | 'stretch' | 'center' | 'span' | 'tile'
-export type BackdropMode = 'live' | 'wallpaper'
 export type ColumnId = 'yesterday' | 'today' | 'nextDay'
 export type ResizeAnchor = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
@@ -29,7 +28,6 @@ export type WindowGeometry = Rect
 
 export interface Settings {
   theme: ThemeMode
-  backdrop: BackdropMode
   desktopLayer: DesktopLayerRequest
   startAtLogin: boolean
   mainWindow: WindowGeometry
@@ -110,7 +108,6 @@ export interface LiquidTodoApi {
   getHistory(): Promise<HistoryPayload>
   patchSettings(patch: Partial<Settings>): Promise<void>
   refreshBackdrop(): Promise<void>
-  getCaptureSource(): Promise<string | null>
   openHistory(): Promise<void>
   closeHistory(): Promise<void>
   quit(): Promise<void>

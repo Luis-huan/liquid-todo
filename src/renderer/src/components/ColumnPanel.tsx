@@ -13,7 +13,6 @@ interface Props {
   image: ImageSize | null
   windowBounds: Rect
   accent: boolean
-  live: boolean
   onHeaderPointerDown: (event: ReactPointerEvent<HTMLElement>) => void
   onToggle: (id: string) => void
   onDelete: (id: string) => void
@@ -34,7 +33,6 @@ export function ColumnPanel({
   image,
   windowBounds,
   accent,
-  live,
   onHeaderPointerDown,
   onToggle,
   onDelete,
@@ -63,7 +61,6 @@ export function ColumnPanel({
         image={image}
         windowBounds={windowBounds}
         accent={accent}
-        live={live}
         panelOffset={panelOffset}
       />
 

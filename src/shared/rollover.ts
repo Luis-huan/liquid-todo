@@ -140,7 +140,6 @@ export function defaultSettings(todayKey: DateKey): Settings {
   void todayKey
   return {
     theme: 'system',
-    backdrop: 'wallpaper',
     desktopLayer: 'auto',
     startAtLogin: true,
     mainWindow: { x: -1, y: -1, width: 760, height: 350 },
@@ -182,12 +181,6 @@ export function normalizeStore(raw: unknown, todayKey: DateKey): NormalizedStore
       rawSettings.theme === 'light' || rawSettings.theme === 'dark' || rawSettings.theme === 'system'
         ? rawSettings.theme
         : defaults.theme,
-    backdrop:
-      storedVersion < 2
-        ? defaults.backdrop
-        : rawSettings.backdrop === 'wallpaper' || rawSettings.backdrop === 'live'
-          ? rawSettings.backdrop
-          : defaults.backdrop,
     desktopLayer:
       rawSettings.desktopLayer === 'workerw' ||
       rawSettings.desktopLayer === 'bottom' ||

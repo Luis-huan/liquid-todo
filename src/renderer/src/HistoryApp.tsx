@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { HistoryPayload, Snapshot, Task } from '../../shared/types'
 import { api } from './api'
-import { GlassFilters, GlassSurface, LiveBackdropVideo } from './components/GlassSurface'
+import { GlassFilters, GlassSurface } from './components/GlassSurface'
+
 import { ResizeHandles } from './components/ResizeHandles'
-import { useLiveBackdrop } from './hooks/useLiveBackdrop'
 import { useWindowFrame } from './hooks/useWindowFrame'
 import { useElementOffset } from './hooks/useElementOffset'
 import type { ImageSize } from './wallpaper'
@@ -31,7 +31,6 @@ export default function HistoryApp() {
     min: HISTORY_MIN,
     fallback: FALLBACK_DISPLAY
   })
-  const live = useLiveBackdrop(snapshot)
   const [panelRef, panelOffset] = useElementOffset<HTMLElement>()
 
   useEffect(() => {
@@ -100,20 +99,12 @@ export default function HistoryApp() {
   return (
     <div className="widget widget--history" data-ready={snapshot ? 'true' : 'false'}>
       <GlassFilters />
-      {live.status === 'live' || live.status === 'connecting' ? (
-        <LiveBackdropVideo
-          videoRef={live.videoRef}
-          windowBounds={windowBounds}
-          backdrop={backdrop}
-        />
-      ) : null}
-      <section className="history" ref={panelRef}>
+            <section className="history" ref={panelRef}>
         <GlassSurface
           backdrop={backdrop}
           image={image}
           windowBounds={windowBounds}
           compact
-          live={live.status === 'live'}
           panelOffset={panelOffset}
         />
         <header className="history__header" onPointerDown={beginDrag}>

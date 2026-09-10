@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
-import { app, BrowserWindow, desktopCapturer, nativeTheme, powerMonitor, screen, session } from 'electron'
-import type { BackdropMode, DesktopLayerRequest, ResolvedTheme, Snapshot, ThemeMode } from '../shared/types'
+import { app, BrowserWindow, nativeTheme, powerMonitor } from 'electron'
+import type { DesktopLayerRequest, ResolvedTheme, Snapshot, ThemeMode } from '../shared/types'
 import { applyDesktopLayer } from './desktopLayer'
 import { registerIpc } from './ipc'
 import { TodoState } from './state'
@@ -16,9 +16,6 @@ import { createHistoryWindow, createMainWindow } from './windows'
 
 const fakeDate = process.argv.find((arg) => arg.startsWith('--fake-date='))?.split('=')[1] ?? null
 const capturePath = process.argv.find((arg) => arg.startsWith('--capture='))?.split('=')[1] ?? null
-const backdropArg = process.argv.find((arg) => arg.startsWith('--backdrop='))?.split('=')[1] ?? null
-const backdropOverride: BackdropMode | null =
-  backdropArg === 'live' || backdropArg === 'wallpaper' ? (backdropArg as BackdropMode) : null
 const layerArg = process.argv.find((arg) => arg.startsWith('--layer='))?.split('=')[1] ?? null
 const layerOverride: DesktopLayerRequest | null =
   layerArg === 'workerw' || layerArg === 'bottom' || layerArg === 'auto'
@@ -36,12 +33,6 @@ let minuteTimer: NodeJS.Timeout | null = null
 let wallpaperTimer: NodeJS.Timeout | null = null
 let alwaysOnTop = false
 
-function applyContentProtection(): void {
-  const live = effectiveBackdrop() === 'live'
-  mainWindow?.setContentProtection(live)
-  historyWindow?.setContentProtection(live)
-}
-
 /**
  * A widget that starts life fully covered by other windows is treated as occluded by Chromium
  * and never presents a frame, so nudge the window size once to force the first paint.
@@ -49,10 +40,6 @@ function applyContentProtection(): void {
 function forceRepaint(win: BrowserWindow | null): void {
   if (!win || win.isDestroyed()) return
   win.webContents.invalidate()
-}
-
-function effectiveBackdrop(): BackdropMode {
-  return backdropOverride ?? state?.settings.backdrop ?? 'live'
 }
 
 function effectiveLayer(): DesktopLayerRequest {
@@ -75,7 +62,6 @@ function snapshotFor(win: BrowserWindow | null): Snapshot {
   const snapshot = state.snapshot()
   snapshot.backdrop = buildBackdrop(win)
   snapshot.theme = resolveTheme()
-  snapshot.settings = { ...snapshot.settings, backdrop: effectiveBackdrop() }
   return snapshot
 }
 
@@ -117,7 +103,6 @@ async function pinWindow(win: BrowserWindow, requested: DesktopLayerRequest): Pr
 function showMainWindow(): void {
   if (!mainWindow) return
   mainWindow.showInactive()
-  applyContentProtection()
   forceRepaint(mainWindow)
   // Showing a Chromium window can drop the desktop ownership, so it is re-applied after.
   if (state) void pinWindow(mainWindow, effectiveLayer())
@@ -131,7 +116,6 @@ function toggleMainWindow(): void {
     forceRepaint(mainWindow)
     if (state) void pinWindow(mainWindow, effectiveLayer())
   }
-  applyContentProtection()
 }
 
 function openHistory(): void {
@@ -143,7 +127,6 @@ function openHistory(): void {
     })
     historyWindow.once('ready-to-show', () => {
       historyWindow?.show()
-      applyContentProtection()
       forceRepaint(historyWindow)
     })
     void pinWindow(historyWindow, effectiveLayer())
@@ -185,24 +168,6 @@ async function bootstrap(): Promise<void> {
     mainWindow = null
   })
 
-  // Desktop capture powers the live glass backdrop; the widget itself is excluded from
-  // the capture through content protection so the glass never films itself.
-  session.defaultSession.setDisplayMediaRequestHandler(
-    async (_request, callback) => {
-      try {
-        const sources = await desktopCapturer.getSources({ types: ['screen'] })
-        const target = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
-        const display = target ? screen.getDisplayMatching(target.getBounds()) : screen.getPrimaryDisplay()
-        const source = sources.find((entry) => entry.display_id === String(display.id)) ?? sources[0]
-        if (source) callback({ video: source })
-        else callback({})
-      } catch {
-        callback({})
-      }
-    },
-    { useSystemPicker: false }
-  )
-
   registerIpc({
     state,
     snapshotFor,
@@ -237,16 +202,11 @@ async function bootstrap(): Promise<void> {
       state?.patchSettings({ theme })
       broadcast()
     },
-    setBackdrop: (mode: BackdropMode) => {
-      state?.patchSettings({ backdrop: mode })
-      applyContentProtection()
-    }
   })
 
   apiState.commit()
 
   showMainWindow()
-  applyContentProtection()
   setTimeout(() => {
     if (!mainWindow || mainWindow.isDestroyed()) return
     mainWindow.setAlwaysOnTop(alwaysOnTop)
