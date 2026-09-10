@@ -4,7 +4,9 @@ directories:
   buildResources: resources
   output: release
 files:
-  - out/**/*
+  - out/main/**/*
+  - out/preload/**/*
+  - out/renderer/**/*
   - package.json
 extraResources:
   - from: resources/desktop-layer.ps1
