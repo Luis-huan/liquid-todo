@@ -109,7 +109,7 @@ export default function HistoryApp() {
         />
         <header className="history__header" onPointerDown={beginDrag}>
           <div>
-            <h2 className="history__title">history</h2>
+            <h2 className="history__title">History</h2>
             <p className="history__subtitle">last 6 days</p>
           </div>
           <button type="button" className="panel__icon" aria-label="Close history" onPointerDown={(e) => e.stopPropagation()} onClick={close}>

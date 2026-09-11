@@ -80,7 +80,11 @@ export function createTray(state: TodoState, actions: TrayActions): Tray {
         click: (item) => {
           state.patchSettings({ startAtLogin: item.checked })
           if (app.isPackaged) {
-            app.setLoginItemSettings({ openAtLogin: item.checked, path: process.execPath })
+            app.setLoginItemSettings({
+              openAtLogin: item.checked,
+              path: process.execPath,
+              name: 'Liquid Todo'
+            })
           }
           render()
         }

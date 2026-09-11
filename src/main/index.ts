@@ -22,6 +22,7 @@ const layerOverride: DesktopLayerRequest | null =
     ? (layerArg as DesktopLayerRequest)
     : null
 const openHistoryOnStart = process.argv.includes('--open-history')
+const LOGIN_ITEM_NAME = 'Liquid Todo'
 
 registerWallpaperScheme()
 
@@ -143,7 +144,10 @@ async function refreshBackdrop(): Promise<void> {
 
 function applyLoginItem(enabled: boolean): void {
   if (!app.isPackaged) return
-  app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath })
+  // Only touch the registry when the state differs, so a manual change in Windows
+  // Task Manager is not overwritten on every launch.
+  if (app.getLoginItemSettings().openAtLogin === enabled) return
+  app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath, name: LOGIN_ITEM_NAME })
 }
 
 async function bootstrap(): Promise<void> {
@@ -206,6 +210,7 @@ async function bootstrap(): Promise<void> {
 
   apiState.commit()
 
+  applyLoginItem(state.settings.startAtLogin)
   showMainWindow()
   setTimeout(() => {
     if (!mainWindow || mainWindow.isDestroyed()) return

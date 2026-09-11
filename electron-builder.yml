@@ -11,6 +11,8 @@ files:
 extraResources:
   - from: resources/desktop-layer.ps1
     to: desktop-layer.ps1
+  - from: resources/tray.png
+    to: tray.png
 win:
   target:
     - target: nsis
