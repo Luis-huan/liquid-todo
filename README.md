@@ -71,12 +71,11 @@ drive as the project and retry.
 
 ## Screenshot
 
-<!--
-Add one by dropping a PNG into the repository and uncommenting the line below.
-![Liquid Todo](docs/screenshot.png)
--->
+![Liquid Todo showing the Yesterday, Today and Next day columns](docs/screenshot.png)
 
-_A screenshot will be added here._
+## Changelog
+
+Release by release changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
