@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -28,8 +28,8 @@ export default function App() {
   const [columns, setColumns] = useState<ColumnView[]>([])
   const [image, setImage] = useState<ImageSize | null>(null)
   const [activeTask, setActiveTask] = useState<Task | null>(null)
+  const [activeWidth, setActiveWidth] = useState<number | null>(null)
   const [noticeVisible, setNoticeVisible] = useState<number | null>(null)
-  const crossMoved = useRef(false)
 
   const { bounds, beginDrag, beginResize, interacting } = useWindowFrame(snapshot, {
     min: MAIN_MIN,
@@ -111,10 +111,35 @@ export default function App() {
     [columns]
   )
 
+  /**
+   * Counts the rows sitting above the dragged card, which is the slot the user sees. The dragged
+   * row itself is skipped, so the result matches "remove it, then insert it here".
+   */
+  const dropIndex = useCallback(
+    (dateKey: string, draggedId: string, translated: { top: number; height: number } | null): number => {
+      const list = document.querySelector(`[data-date="${dateKey}"] .panel__list`)
+      if (!list) return -1
+      const rows = Array.from(list.querySelectorAll<HTMLElement>('.task')).filter(
+        (row) => row.dataset.taskId !== draggedId
+      )
+      if (!translated) return rows.length
+      const center = translated.top + translated.height / 2
+      let index = 0
+      for (const row of rows) {
+        const rect = row.getBoundingClientRect()
+        if (rect.top + rect.height / 2 < center) index += 1
+      }
+      return index
+    },
+    []
+  )
+
   const onDragStart = (event: DragStartEvent): void => {
     const column = findColumn(String(event.active.id))
     setActiveTask(column?.tasks.find((task) => task.id === event.active.id) ?? null)
-    crossMoved.current = false
+    // The floating card copies the width of the row it came from, so it can never grow past the
+    // glass edge of a narrow column.
+    setActiveWidth(Math.round(event.active.rect.current.initial?.width ?? 0) || null)
   }
 
   const onDragOver = (event: DragOverEvent): void => {
@@ -123,8 +148,6 @@ export default function App() {
     const from = findColumn(String(active.id))
     const to = findColumn(String(over.id))
     if (!from || !to || from.dateKey === to.dateKey || to.readOnly) return
-
-    crossMoved.current = true
     setColumns((previous) =>
       previous.map((column) => {
         if (column.dateKey === from.dateKey) {
@@ -147,27 +170,28 @@ export default function App() {
   const onDragEnd = (event: DragEndEvent): void => {
     const { active, over } = event
     setActiveTask(null)
-    const column = findColumn(String(active.id))
+    setActiveWidth(null)
+    const activeId = String(active.id)
+    const from = findColumn(activeId)
+    const to = over ? findColumn(String(over.id)) ?? from : from
 
-    if (!column || !over) {
+    if (!from || !to || !over) {
       if (snapshot) setColumns(snapshot.columns)
-      crossMoved.current = false
       return
     }
 
-    const overId = String(over.id)
-    const sameColumnPath = !crossMoved.current && overId !== column.dateKey
-    const index = sameColumnPath
-      ? column.tasks.findIndex((task) => task.id === overId)
-      : column.tasks.findIndex((task) => task.id === active.id)
-
-    void api.moveTask(String(active.id), column.dateKey, index < 0 ? column.tasks.length : index)
-    crossMoved.current = false
+    // Where the row actually ended up on screen decides the new position. Asking dnd-kit which
+    // droppable was under the pointer used to resolve to the whole column whenever the list was
+    // mostly empty, which made the drop a no-op.
+    const translated = active.rect.current.translated
+    const measured = dropIndex(to.dateKey, activeId, translated)
+    const fallback = to.tasks.filter((task) => task.id !== activeId).length
+    void api.moveTask(activeId, to.dateKey, measured < 0 ? fallback : measured)
   }
 
   const onDragCancel = (): void => {
     setActiveTask(null)
-    crossMoved.current = false
+    setActiveWidth(null)
     if (snapshot) setColumns(snapshot.columns)
   }
 
@@ -215,7 +239,9 @@ export default function App() {
             />
           ))}
         </div>
-        <DragOverlay dropAnimation={null}>{activeTask ? <TaskPreview task={activeTask} /> : null}</DragOverlay>
+        <DragOverlay dropAnimation={null}>
+          {activeTask ? <TaskPreview task={activeTask} width={activeWidth ?? undefined} /> : null}
+        </DragOverlay>
       </DndContext>
       <ResizeHandles onStart={beginResize} />
       {notice && noticeVisible === notice.id ? (
