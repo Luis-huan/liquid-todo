@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import { app, BrowserWindow, nativeTheme, powerMonitor } from 'electron'
 import type { DesktopLayerRequest, ResolvedTheme, Snapshot, ThemeMode } from '../shared/types'
-import { applyDesktopLayer } from './desktopLayer'
+import { applyDesktopLayer, desktopLayerStatus, disposeDesktopLayer } from './desktopLayer'
 import { registerIpc } from './ipc'
 import { TodoState } from './state'
 import { createTray } from './tray'
@@ -32,7 +32,13 @@ let historyWindow: BrowserWindow | null = null
 let midnightTimer: NodeJS.Timeout | null = null
 let minuteTimer: NodeJS.Timeout | null = null
 let wallpaperTimer: NodeJS.Timeout | null = null
+let layerTimer: NodeJS.Timeout | null = null
+let layerProbe: Promise<void> | null = null
 let alwaysOnTop = false
+/** The desktop layer retries while the app runs, so the fallback warning is shown only once. */
+let layerWarningShown = false
+/** How often the widget re-checks that the desktop still owns it. */
+const LAYER_CHECK_MS = 12_000
 
 /**
  * A widget that starts life fully covered by other windows is treated as occluded by Chromium
@@ -85,14 +91,29 @@ function scheduleMidnight(): void {
   }, Math.max(1000, next.getTime() - now.getTime()))
 }
 
+/**
+ * The widget can only float above other windows when the desktop pin is off, so the two settings
+ * are exclusive: on the desktop layer it is never topmost.
+ */
+function applyAlwaysOnTop(): void {
+  const pinned = state?.settings.desktopLayer !== 'bottom'
+  const value = pinned ? false : alwaysOnTop
+  for (const win of [mainWindow, historyWindow]) {
+    if (win && !win.isDestroyed()) win.setAlwaysOnTop(value)
+  }
+}
+
 async function pinWindow(win: BrowserWindow, requested: DesktopLayerRequest): Promise<void> {
   if (!state) return
   const result = await applyDesktopLayer(win, requested)
   console.log('[liquid-todo] desktop layer:', JSON.stringify(result))
-  win.setAlwaysOnTop(alwaysOnTop)
+  applyAlwaysOnTop()
   if (win === mainWindow) {
     state.setDesktopLayer(result.mode)
-    if (requested !== 'bottom' && !result.ok) {
+    if (result.ok || requested === 'bottom') {
+      layerWarningShown = false
+    } else if (!layerWarningShown) {
+      layerWarningShown = true
       state.setNotice(
         'Windows would not let the widget sit on the wallpaper layer, so it floats as a normal window instead.',
         'warn'
@@ -101,12 +122,54 @@ async function pinWindow(win: BrowserWindow, requested: DesktopLayerRequest): Pr
   }
 }
 
+/**
+ * Re-checks the desktop ownership and quietly re-attaches when it was lost.
+ *
+ * Windows drops the desktop owner on Explorer restarts, display and theme changes, and when a
+ * fullscreen game or video switches modes. Re-attaching blindly is what used to shove the widget
+ * in front of every window, so the check runs first and the lift inside the helper only happens
+ * once the desktop really owns the window again. No notice is raised here: it is a repair, not a
+ * problem the user has to act on.
+ */
+async function ensureDesktopPin(): Promise<void> {
+  const win = mainWindow
+  if (!state || !win || win.isDestroyed()) return
+  if (layerProbe) return layerProbe
+
+  layerProbe = (async () => {
+    const requested = effectiveLayer()
+    const status = await desktopLayerStatus(win)
+    const historyStatus =
+      historyWindow && !historyWindow.isDestroyed() ? await desktopLayerStatus(historyWindow) : null
+
+    // No answer (host restarting, policy blocked it): leave the windows exactly as they are.
+    if (!status) return
+
+    if (requested === 'bottom') {
+      if (status.pinned) await pinWindow(win, 'bottom')
+      return
+    }
+    if (!status.pinned || status.topmost || !status.toolWindow) {
+      await pinWindow(win, requested)
+    }
+    if (historyWindow && !historyWindow.isDestroyed() && historyStatus && !historyStatus.pinned) {
+      await pinWindow(historyWindow, requested)
+    }
+  })()
+
+  try {
+    await layerProbe
+  } finally {
+    layerProbe = null
+  }
+}
+
 function showMainWindow(): void {
   if (!mainWindow) return
   mainWindow.showInactive()
   forceRepaint(mainWindow)
-  // Showing a Chromium window can drop the desktop ownership, so it is re-applied after.
-  if (state) void pinWindow(mainWindow, effectiveLayer())
+  // Showing a Chromium window can drop the desktop ownership, so it is checked afterwards.
+  if (state) void ensureDesktopPin()
 }
 
 function toggleMainWindow(): void {
@@ -115,8 +178,23 @@ function toggleMainWindow(): void {
   else {
     mainWindow.showInactive()
     forceRepaint(mainWindow)
-    if (state) void pinWindow(mainWindow, effectiveLayer())
+    if (state) void ensureDesktopPin()
   }
+}
+
+/**
+ * "Show desktop" minimises every window. On the desktop layer the widget belongs to the desktop,
+ * so it comes straight back; as an ordinary window it is meant to disappear with everything else.
+ */
+function reviveFromMinimize(): void {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return
+  if (state?.desktopLayerMode !== 'workerw') return
+  setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.restore()
+    void ensureDesktopPin()
+  }, 40)
 }
 
 function openHistory(): void {
@@ -160,14 +238,7 @@ async function bootstrap(): Promise<void> {
   registerWallpaperProtocol()
 
   mainWindow = createMainWindow(state)
-  // "Show desktop" minimises every window; the widget belongs to the desktop, so it comes back.
-  mainWindow.on('minimize', () => {
-    setTimeout(() => {
-      if (!mainWindow || mainWindow.isDestroyed()) return
-      mainWindow.restore()
-      void pinWindow(mainWindow, effectiveLayer())
-    }, 40)
-  })
+  mainWindow.on('minimize', reviveFromMinimize)
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -181,6 +252,11 @@ async function bootstrap(): Promise<void> {
     applyDesktopLayer: async (requested) => {
       if (mainWindow) await pinWindow(mainWindow, requested)
     },
+    // Windows reshuffles the z-order whenever a window is moved or resized, so the desktop
+    // ownership is checked again once a drag or resize gesture ends.
+    onFrameSettled: () => {
+      void ensureDesktopPin()
+    },
     applyLoginItem
   })
 
@@ -193,13 +269,21 @@ async function bootstrap(): Promise<void> {
     },
     setDesktopLayer: (mode) => {
       state?.patchSettings({ desktopLayer: mode })
+      // Floating above every window and living on the desktop layer cannot both be true.
+      if (mode !== 'bottom') alwaysOnTop = false
       if (mainWindow) void pinWindow(mainWindow, mode)
       if (historyWindow) void pinWindow(historyWindow, mode)
     },
     setAlwaysOnTop: (value) => {
       alwaysOnTop = value
-      mainWindow?.setAlwaysOnTop(value)
-      historyWindow?.setAlwaysOnTop(value)
+      // Asking to float above other windows means leaving the desktop layer behind.
+      if (value && state?.settings.desktopLayer !== 'bottom') {
+        state?.patchSettings({ desktopLayer: 'bottom' })
+        if (mainWindow) void pinWindow(mainWindow, 'bottom')
+        if (historyWindow) void pinWindow(historyWindow, 'bottom')
+        return
+      }
+      applyAlwaysOnTop()
     },
     isAlwaysOnTop: () => alwaysOnTop,
     setTheme: (theme: ThemeMode) => {
@@ -213,15 +297,15 @@ async function bootstrap(): Promise<void> {
   applyLoginItem(state.settings.startAtLogin)
   showMainWindow()
   setTimeout(() => {
-    if (!mainWindow || mainWindow.isDestroyed()) return
-    mainWindow.setAlwaysOnTop(alwaysOnTop)
-    void pinWindow(mainWindow, effectiveLayer())
+    applyAlwaysOnTop()
+    void ensureDesktopPin()
   }, 2000)
 
-  // Safety net: some shell events (theme change, display change, explorer restart) reset ownership.
-  setInterval(() => {
-    if (mainWindow) void pinWindow(mainWindow, effectiveLayer())
-  }, 300_000)
+  // Safety net: shell events (theme change, display change, Explorer restart) drop the desktop
+  // ownership, which is what used to let the widget climb in front of other windows.
+  layerTimer = setInterval(() => {
+    void ensureDesktopPin()
+  }, LAYER_CHECK_MS)
 
   if (capturePath) {
     setTimeout(() => {
@@ -242,9 +326,13 @@ async function bootstrap(): Promise<void> {
   powerMonitor.on('resume', () => {
     state?.tick()
     void refreshBackdrop()
+    void ensureDesktopPin()
   })
 
-  nativeTheme.on('updated', () => broadcast())
+  nativeTheme.on('updated', () => {
+    broadcast()
+    void ensureDesktopPin()
+  })
   app.on('second-instance', () => {
     showMainWindow()
   })
@@ -274,6 +362,8 @@ app.on('before-quit', () => {
   if (midnightTimer) clearTimeout(midnightTimer)
   if (minuteTimer) clearInterval(minuteTimer)
   if (wallpaperTimer) clearInterval(wallpaperTimer)
+  if (layerTimer) clearInterval(layerTimer)
+  disposeDesktopLayer()
   state?.saveNow()
 })
 

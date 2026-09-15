@@ -1,15 +1,24 @@
-# Pins the widget to the Windows desktop so it behaves like a wallpaper widget:
-# visible when the desktop is shown, covered by normal windows, absent from Alt+Tab.
+# Pins the widget to the Windows desktop so it behaves like a wallpaper widget: visible when the
+# desktop is shown, covered by every normal window, absent from Alt+Tab, never raised on its own.
 #
 # The window is NOT reparented. Reparenting (SetParent) makes Chromium stop presenting the
-# window on Windows 11 24H2+, so instead the desktop window is assigned as the widget's
-# OWNER, which keeps the widget a normal top-level window that renders fine.
+# window on Windows 11 24H2+, so the desktop window is assigned as the widget's OWNER instead,
+# which keeps the widget a normal top-level window that renders fine.
+#
+# Two ways to run it:
+#   -Serve                long lived host: one JSON request per line on stdin, one JSON reply per
+#                         line on stdout. The app uses this so re-checking the desktop ownership
+#                         costs a pipe write instead of a fresh PowerShell start.
+#   -Hwnd <n> -Mode <m>   single attach, for manual use.
+[CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][long]$Hwnd,
-  [ValidateSet('workerw', 'bottom')][string]$Mode = 'workerw'
+  [string]$Hwnd = '',
+  [ValidateSet('workerw', 'bottom')][string]$Mode = 'workerw',
+  [switch]$Serve
 )
 
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 Add-Type -Namespace LiquidTodo -Name Native -MemberDefinition @'
 [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpszClass, string lpszWindow);
@@ -27,10 +36,12 @@ public delegate bool EnumProc(IntPtr hWnd, IntPtr lparam);
 $GWL_EXSTYLE = -20
 $GWLP_HWNDPARENT = -8
 $WS_EX_TOOLWINDOW = 0x00000080
+$WS_EX_TOPMOST = 0x00000008
 $SWP_NOSIZE = 0x0001
 $SWP_NOMOVE = 0x0002
 $SWP_NOACTIVATE = 0x0010
 $SWP_FRAMECHANGED = 0x0020
+$SWP_NOOWNERZORDER = 0x0200
 $HWND_TOP = [IntPtr]::Zero
 $HWND_NOTOPMOST = [IntPtr](-2)
 
@@ -55,19 +66,26 @@ function Get-Progman {
   return $script:progman
 }
 
-function Set-ToolWindowStyle([IntPtr]$handle, [bool]$enabled) {
+function Get-ExStyle([IntPtr]$handle) {
+  if ($handle -eq [IntPtr]::Zero) { return [long]0 }
   if ([IntPtr]::Size -eq 8) {
-    $style = [LiquidTodo.Native]::GetWindowLongPtr64($handle, $GWL_EXSTYLE).ToInt64()
-    if ($enabled) { $style = $style -bor $WS_EX_TOOLWINDOW } else { $style = $style -band (-bnot $WS_EX_TOOLWINDOW) }
+    return [LiquidTodo.Native]::GetWindowLongPtr64($handle, $GWL_EXSTYLE).ToInt64()
+  }
+  return [long][LiquidTodo.Native]::GetWindowLong32($handle, $GWL_EXSTYLE)
+}
+
+function Set-ToolWindowStyle([IntPtr]$handle, [bool]$enabled) {
+  $style = Get-ExStyle $handle
+  if ($enabled) { $style = $style -bor $WS_EX_TOOLWINDOW } else { $style = $style -band (-bnot $WS_EX_TOOLWINDOW) }
+  if ([IntPtr]::Size -eq 8) {
     [void][LiquidTodo.Native]::SetWindowLongPtr64($handle, $GWL_EXSTYLE, [IntPtr]$style)
   } else {
-    $style = [LiquidTodo.Native]::GetWindowLong32($handle, $GWL_EXSTYLE)
-    if ($enabled) { $style = $style -bor $WS_EX_TOOLWINDOW } else { $style = $style -band (-bnot $WS_EX_TOOLWINDOW) }
     [void][LiquidTodo.Native]::SetWindowLong32($handle, $GWL_EXSTYLE, [int]$style)
   }
 }
 
 function Get-Owner([IntPtr]$handle) {
+  if ($handle -eq [IntPtr]::Zero) { return [IntPtr]::Zero }
   if ([IntPtr]::Size -eq 8) { return [LiquidTodo.Native]::GetWindowLongPtr64($handle, $GWLP_HWNDPARENT) }
   return [IntPtr]([LiquidTodo.Native]::GetWindowLong32($handle, $GWLP_HWNDPARENT))
 }
@@ -94,7 +112,7 @@ function Find-DesktopHost {
     return @{ target = $workerUnderProgman; name = 'WorkerW(progman)' }
   }
 
-  # Older layout: a top-level WorkerW hosts the icon view and the wallpaper worker follows it.
+  # Older layout: a top level WorkerW hosts the icon view and the wallpaper worker follows it.
   $worker = [IntPtr]::Zero
   while ($true) {
     $worker = [LiquidTodo.Native]::FindWindowEx([IntPtr]::Zero, $worker, 'WorkerW', $null)
@@ -109,38 +127,117 @@ function Find-DesktopHost {
   return @{ target = $progman; name = 'Progman' }
 }
 
-$target = [IntPtr]$Hwnd
+function Test-DesktopOwner([IntPtr]$handle) {
+  $owner = Get-Owner $handle
+  if ($owner -eq [IntPtr]::Zero) { return $false }
+  $class = Get-Class $owner
+  return ($class -eq 'WorkerW' -or $class -eq 'Progman' -or $class -eq 'Worker')
+}
 
-try {
-  if ($Mode -eq 'workerw') {
-    $hostInfo = Find-DesktopHost
-    if ($null -eq $hostInfo -or $hostInfo.target -eq [IntPtr]::Zero) {
-      @{ ok = $false; mode = 'workerw'; parent = 'none'; error = 'desktop window not found' } | ConvertTo-Json -Compress
-      exit 0
-    }
-
-    Set-ToolWindowStyle $target $true
-    Set-Owner $target $hostInfo.target
-    if ((Get-Owner $target) -ne $hostInfo.target) {
-      @{ ok = $false; mode = 'workerw'; parent = $hostInfo.name; error = 'desktop ownership was rejected' } | ConvertTo-Json -Compress
-      exit 0
-    }
-
-    # Live wallpapers draw in their own desktop windows, so the widget has to be lifted above
-    # them; it stays below every normal window because it is never topmost.
-    [void][LiquidTodo.Native]::SetWindowPos($target, $HWND_TOP, 0, 0, 0, 0,
-      ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED))
-
-    @{ ok = $true; mode = 'workerw'; parent = $hostInfo.name; error = '' } | ConvertTo-Json -Compress
-    exit 0
+function Invoke-Attach([IntPtr]$handle, [string]$mode) {
+  if ($handle -eq [IntPtr]::Zero) {
+    return @{ ok = $false; mode = $mode; parent = 'none'; pinned = $false; error = 'window handle unavailable' }
   }
 
-  Set-Owner $target ([IntPtr]::Zero)
-  Set-ToolWindowStyle $target $true
-  [void][LiquidTodo.Native]::SetWindowPos($target, $HWND_NOTOPMOST, 0, 0, 0, 0,
+  if ($mode -eq 'bottom') {
+    # A plain floating window: no owner and not topmost, so a click raises it like any other app
+    # and Show Desktop hides it.
+    Set-Owner $handle ([IntPtr]::Zero)
+    Set-ToolWindowStyle $handle $true
+    [void][LiquidTodo.Native]::SetWindowPos($handle, $HWND_NOTOPMOST, 0, 0, 0, 0,
+      ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE -bor $SWP_NOOWNERZORDER))
+    return @{ ok = $true; mode = 'bottom'; parent = 'desktop-independent'; pinned = $false; error = '' }
+  }
+
+  # A sticky topmost flag would survive the re-own below, and the desktop layer must never be
+  # topmost. It is cleared while the window still has no owner, so this cannot lift the widget
+  # above normal windows.
+  if (((Get-ExStyle $handle) -band $WS_EX_TOPMOST) -ne 0) {
+    Set-Owner $handle ([IntPtr]::Zero)
+    [void][LiquidTodo.Native]::SetWindowPos($handle, $HWND_NOTOPMOST, 0, 0, 0, 0,
+      ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE -bor $SWP_NOOWNERZORDER))
+  }
+
+  $hostInfo = Find-DesktopHost
+  if ($null -eq $hostInfo -or $hostInfo.target -eq [IntPtr]::Zero) {
+    return @{ ok = $false; mode = 'workerw'; parent = 'none'; pinned = $false; error = 'desktop window not found' }
+  }
+
+  Set-ToolWindowStyle $handle $true
+  Set-Owner $handle $hostInfo.target
+  if (-not (Test-DesktopOwner $handle)) {
+    return @{ ok = $false; mode = 'workerw'; parent = $hostInfo.name; pinned = $false; error = 'desktop ownership was rejected' }
+  }
+
+  # Live wallpapers draw in their own desktop windows, so the widget is lifted above them. The
+  # lift only happens once the desktop really owns the window: HWND_TOP is then scoped to the
+  # owner's group and stays under every normal window. Without the check above this call would
+  # put the widget in front of the user's work, which is exactly what it must never do.
+  [void][LiquidTodo.Native]::SetWindowPos($handle, $HWND_TOP, 0, 0, 0, 0,
     ($SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_NOACTIVATE -bor $SWP_FRAMECHANGED))
 
-  @{ ok = $true; mode = 'bottom'; parent = 'desktop-independent'; error = '' } | ConvertTo-Json -Compress
-} catch {
-  @{ ok = $false; mode = $Mode; parent = 'unknown'; error = $_.Exception.Message } | ConvertTo-Json -Compress
+  @{ ok = $true; mode = 'workerw'; parent = $hostInfo.name; pinned = $true; error = '' }
 }
+
+function Invoke-Status([IntPtr]$handle) {
+  if ($handle -eq [IntPtr]::Zero) {
+    return @{ ok = $false; pinned = $false; ownerClass = ''; topmost = $false; toolWindow = $false; error = 'window handle unavailable' }
+  }
+  $owner = Get-Owner $handle
+  $exStyle = Get-ExStyle $handle
+  return @{
+    ok = $true
+    pinned = (Test-DesktopOwner $handle)
+    ownerClass = (Get-Class $owner)
+    topmost = (($exStyle -band $WS_EX_TOPMOST) -ne 0)
+    toolWindow = (($exStyle -band $WS_EX_TOOLWINDOW) -ne 0)
+    error = ''
+  }
+}
+
+function Invoke-Detach([IntPtr]$handle) {
+  if ($handle -eq [IntPtr]::Zero) { return @{ ok = $false; error = 'window handle unavailable' } }
+  Set-Owner $handle ([IntPtr]::Zero)
+  return @{ ok = $true; error = '' }
+}
+
+function ConvertTo-Handle([string]$value) {
+  if ([string]::IsNullOrWhiteSpace($value)) { return [IntPtr]::Zero }
+  try { return [IntPtr][long]$value } catch { return [IntPtr]::Zero }
+}
+
+if ($Serve) {
+  while ($true) {
+    $line = [Console]::In.ReadLine()
+    if ($null -eq $line) { break }
+    $line = $line.Trim()
+    if (-not $line) { continue }
+
+    $request = $null
+    $reply = $null
+    $stop = $false
+    try {
+      $request = $line | ConvertFrom-Json
+      $target = ConvertTo-Handle ([string]$request.hwnd)
+      switch ([string]$request.cmd) {
+        'attach' { $reply = Invoke-Attach $target ([string]$request.mode) }
+        'status' { $reply = Invoke-Status $target }
+        'detach' { $reply = Invoke-Detach $target }
+        'ping'   { $reply = @{ ok = $true; error = '' } }
+        'exit'   { $reply = @{ ok = $true; error = '' }; $stop = $true }
+        default  { $reply = @{ ok = $false; error = "unknown command: $($request.cmd)" } }
+      }
+    } catch {
+      $reply = @{ ok = $false; error = $_.Exception.Message }
+    }
+
+    if ($null -ne $request -and $null -ne $request.id) { $reply['id'] = $request.id }
+    [Console]::Out.WriteLine(($reply | ConvertTo-Json -Compress -Depth 5))
+    [Console]::Out.Flush()
+    if ($stop) { break }
+  }
+  exit 0
+}
+
+$single = ConvertTo-Handle $Hwnd
+(Invoke-Attach $single $Mode) | ConvertTo-Json -Compress -Depth 5

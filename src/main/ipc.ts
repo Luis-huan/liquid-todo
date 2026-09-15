@@ -19,6 +19,8 @@ export interface IpcContext {
   closeHistory: () => void
   refreshBackdrop: () => Promise<void>
   applyDesktopLayer: (requested: Settings['desktopLayer']) => Promise<void>
+  /** Called once a move or resize gesture has finished. */
+  onFrameSettled: () => void
   applyLoginItem: (enabled: boolean) => void
 }
 
@@ -118,6 +120,7 @@ export function registerIpc(context: IpcContext): void {
     const bounds = win.getBounds()
     state.updateWindowBounds(boundsKey(win), bounds)
     state.emit()
+    context.onFrameSettled()
   })
 
   ipcMain.handle('window:resize-start', (event, anchor: ResizeAnchor) => {
@@ -140,5 +143,6 @@ export function registerIpc(context: IpcContext): void {
     const bounds = win.getBounds()
     state.updateWindowBounds(boundsKey(win), bounds)
     state.emit()
+    context.onFrameSettled()
   })
 }

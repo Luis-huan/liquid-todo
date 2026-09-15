@@ -55,10 +55,16 @@ export function createTray(state: TodoState, actions: TrayActions): Tray {
         click: (item) => actions.setDesktopLayer(item.checked ? 'workerw' : 'bottom')
       },
       {
-        label: 'Keep on top of windows',
+        label:
+          state.settings.desktopLayer === 'bottom'
+            ? 'Keep on top of windows'
+            : 'Keep on top of windows (leaves the desktop layer)',
         type: 'checkbox',
         checked: actions.isAlwaysOnTop(),
-        click: (item) => actions.setAlwaysOnTop(item.checked)
+        click: (item) => {
+          actions.setAlwaysOnTop(item.checked)
+          render()
+        }
       },
       {
         label: 'Glass look',
