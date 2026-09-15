@@ -129,7 +129,8 @@
   z-index: 2;
   flex: 1;
   margin: 0;
-  padding: 4px 10px 12px;
+  /* Keeps every row inside the glass, clear of the 16px refraction ring along the rim. */
+  padding: 4px 16px 12px;
   list-style: none;
   overflow-y: auto;
   overflow-x: hidden;
@@ -168,9 +169,9 @@
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  padding: 8px 10px;
-  margin: 3px 0;
+  gap: 8px;
+  padding: 6px 9px;
+  margin: 2px 0;
   border-radius: var(--radius-row);
   background: rgba(255, 255, 255, 0.16);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
@@ -197,7 +198,6 @@
 }
 
 .task--overlay {
-  width: 250px;
   list-style: none;
   background: rgba(255, 255, 255, 0.5);
   box-shadow: 0 16px 32px -12px rgba(8, 12, 24, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.8);
@@ -210,8 +210,8 @@
 
 .task__check {
   flex: 0 0 auto;
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
   margin-top: 1px;
   padding: 0;
   display: grid;
@@ -230,8 +230,8 @@
 }
 
 .task__check svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   fill: none;
   stroke: #fff;
   stroke-width: 2.4;
@@ -253,6 +253,28 @@
   stroke-dashoffset: 0;
 }
 
+/* The plan and the frozen day have no check box; a dot keeps the text aligned with Today. */
+.task__bullet {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+}
+
+.task__bullet::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(150, 160, 180, 0.6);
+}
+
+.task__bullet[data-done='true']::before {
+  background: var(--accent);
+}
+
 .task__body {
   flex: 1;
   min-width: 0;
@@ -263,7 +285,7 @@
 }
 
 .task__text {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--text-primary);
   overflow-wrap: anywhere;
@@ -281,16 +303,16 @@
   border: 0;
   outline: none;
   background: transparent;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--text-primary);
 }
 
 .task__chip {
-  font-size: 9px;
+  font-size: 8.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 99px;
   background: rgba(255, 159, 10, 0.22);
   color: #a86200;
@@ -308,8 +330,8 @@
 
 .task__delete {
   flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   margin-top: 1px;
   padding: 0;
   display: grid;
@@ -349,8 +371,8 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  margin: 0 10px 12px;
-  padding: 9px 11px;
+  margin: 0 16px 12px;
+  padding: 8px 10px;
   border-radius: var(--radius-row);
   background: rgba(255, 255, 255, 0.38);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
@@ -375,7 +397,7 @@
   border: 0;
   outline: none;
   background: transparent;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-primary);
 }
 
@@ -557,26 +579,33 @@
 }
 
 .history__day {
-  padding: 9px 0 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.28);
+  padding: 14px 0 10px;
+  border-top: 1px solid rgba(12, 16, 26, 0.2);
 }
 
 :root[data-theme='dark'] .history__day {
-  border-top-color: rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.3);
+}
+
+/* The first day sits straight under the window title, so it does not need a rule above it. */
+.history__day:first-child {
+  padding-top: 6px;
+  border-top: 0;
 }
 
 .history__day-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
 }
 
 .history__day-label {
   margin: 0;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .history__day-count {
@@ -586,7 +615,7 @@
 }
 
 .history__tasks {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   padding: 0;
   list-style: none;
   display: flex;

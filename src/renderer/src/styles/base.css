@@ -1,7 +1,7 @@
 :root {
   --font: 'Inter Variable', 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   --radius-panel: 30px;
-  --radius-row: 16px;
+  --radius-row: 14px;
   --accent: #0a84ff;
   --accent-soft: rgba(10, 132, 255, 0.18);
   --text-primary: rgba(12, 16, 26, 0.92);
