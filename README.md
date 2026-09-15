@@ -8,15 +8,28 @@ Written with Electron, React and TypeScript. No account, no cloud, no network ca
 ## Features
 
 - **Three day columns** - Yesterday (read only), Today and Next day.
-- **Drag and drop** tasks inside a column or across days.
+- **Drag and drop** tasks inside a column or across days. Only Today has check boxes: tick a task
+  off and it drops to the bottom of the column, while new tasks join the open work above the
+  finished ones. Today keeps three bands - work carried over from an earlier day at the top,
+  the ordinary open tasks you can order freely in the middle, finished work at the bottom - and
+  Yesterday with Next day stay plain lists.
 - **Midnight rollover** - the next day's plan becomes the new today, unfinished tasks from the
-  ending day are carried over on top, everything older than the retention window is purged.
-- **History window** - the last six days, grouped by date with done/total counts.
+  ending day are carried over *above* the plan with a "carried over" badge, and the day that
+  just ended keeps its unfinished tasks on top with a "moved to today" badge. Everything older
+  than the retention window is purged. A badge stays put while a task is dragged around and is
+  cleared by ticking the task off.
+- **History window** - the last six days, each behind a dividing rule with a centred, bolded
+  date and its done/total count. Like the Yesterday column, a finished day shows what was left
+  undone above what got done, including days recorded by an earlier version.
 - **Liquid glass** - every panel samples the wallpaper under its own position, so the blur and
   the refraction line up with the real desktop. All Windows wallpaper fit modes are honoured
   (fill, fit, stretch, center, span, tile).
 - **Desktop integration** - the widget attaches itself to the desktop layer (WorkerW, with a
-  fallback when Windows refuses) and comes back after Show Desktop.
+  fallback when Windows refuses), where it stays behind every other application and comes back
+  after Show Desktop. The ownership is verified before the widget is ever lifted and re-checked
+  while it runs, so it cannot drift in front of your work — not even when a fullscreen game or
+  video switches modes. Turn the pin off and it becomes an ordinary window that floats above the
+  desktop and disappears with Show Desktop.
 - **Tray menu** - show/hide, open history, refresh backdrop, pin to desktop layer, keep on top,
   glass look (follow Windows / light / dark), start with Windows, quit.
 - **Frameless chrome** - drag a window by its header, resize it from any edge or corner.
