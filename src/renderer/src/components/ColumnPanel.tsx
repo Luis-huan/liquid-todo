@@ -53,9 +53,16 @@ export function ColumnPanel({
   }
 
   const tasks: Task[] = column.tasks
+  // Only the day being worked on can be ticked off, so it is the only column with check boxes.
+  const showCheck = column.id === 'today'
 
   return (
-    <section className="panel" ref={panelRef} data-accent={accent ? 'true' : 'false'}>
+    <section
+      className="panel"
+      ref={panelRef}
+      data-accent={accent ? 'true' : 'false'}
+      data-date={column.dateKey}
+    >
       <GlassSurface
         backdrop={backdrop}
         image={image}
@@ -71,7 +78,13 @@ export function ColumnPanel({
         </div>
         <div className="panel__meta">
           <span className="panel__count">
-            {column.done} <span className="panel__count-divider">/</span> {column.total}
+            {showCheck || column.id === 'yesterday' ? (
+              <>
+                {column.done} <span className="panel__count-divider">/</span> {column.total}
+              </>
+            ) : (
+              column.total
+            )}
           </span>
           {column.id === 'yesterday' ? (
             <button
@@ -111,6 +124,7 @@ export function ColumnPanel({
               key={task.id}
               task={task}
               readOnly={column.readOnly}
+              showCheck={showCheck}
               onToggle={onToggle}
               onDelete={onDelete}
               onEdit={onEdit}

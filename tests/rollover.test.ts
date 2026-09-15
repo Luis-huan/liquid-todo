@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   advanceDays,
+  bandInsertRange,
   clampTaskText,
   createEmptyStore,
+  insertOpenTask,
   normalizeStore,
-  normalizeTaskOrder
+  normalizeTaskOrder,
+  sortTaskBands,
+  taskBand
 } from '../src/shared/rollover'
 import type { Task } from '../src/shared/types'
 
@@ -34,11 +38,13 @@ describe('midnight rollover', () => {
     // yesterday stays untouched as history
     expect(result.days['2026-09-09'].map((entry) => entry.id)).toEqual(['y1', 'y2'])
 
-    // the day that just ended keeps its record, unfinished entries flagged as moved
+    // the day that just ended keeps its record: what never got done moves to the top and is
+    // flagged as moved, the finished work settles underneath
     const ended = result.days['2026-09-10']
-    expect(ended.map((entry) => entry.id)).toEqual(['t1', 't2'])
-    expect(ended[0].movedToToday).toBeUndefined()
-    expect(ended[1].movedToToday).toBe(true)
+    expect(ended.map((entry) => entry.id)).toEqual(['t2', 't1'])
+    expect(ended[0].movedToToday).toBe(true)
+    expect(ended[1].movedToToday).toBeUndefined()
+    expect(ended.map((entry) => entry.order)).toEqual([0, 1])
 
     // unfinished work sits on top of tomorrow's plan, with a fresh id
     const today = result.days['2026-09-11']
@@ -47,6 +53,49 @@ describe('midnight rollover', () => {
     expect(today[0].id).not.toBe('t2')
     expect(today[0].movedToToday).toBeUndefined()
     expect(today.map((entry) => entry.order)).toEqual([0, 1, 2])
+  })
+
+  it('keeps carried work above the plan even when the plan already had an order', () => {
+    const days: Record<string, Task[]> = {
+      '2026-09-10': [task('t1', 'today open', false, 0)],
+      '2026-09-11': [
+        task('n1', 'planned first', false, 0),
+        task('n2', 'planned second', false, 1),
+        task('n3', 'planned third', false, 2)
+      ]
+    }
+
+    const result = advanceDays('2026-09-10', days, '2026-09-11')
+    const today = result.days['2026-09-11']
+
+    expect(today.map((entry) => entry.text)).toEqual([
+      'today open',
+      'planned first',
+      'planned second',
+      'planned third'
+    ])
+    expect(today.map((entry) => entry.order)).toEqual([0, 1, 2, 3])
+    expect(today[0].carriedFrom).toBe('2026-09-10')
+  })
+
+  it('stacks several carried tasks in their original order above the plan', () => {
+    const days: Record<string, Task[]> = {
+      '2026-09-10': [
+        task('a', 'first open', false, 0),
+        task('b', 'done', true, 1),
+        task('c', 'second open', false, 2)
+      ],
+      '2026-09-11': [task('p', 'plan', false, 0)]
+    }
+
+    const result = advanceDays('2026-09-10', days, '2026-09-11')
+
+    expect(result.days['2026-09-10'].map((entry) => entry.id)).toEqual(['a', 'c', 'b'])
+    expect(result.days['2026-09-11'].map((entry) => entry.text)).toEqual([
+      'first open',
+      'second open',
+      'plan'
+    ])
   })
 
   it('keeps the original origin when a task rolls over several days', () => {
@@ -108,6 +157,93 @@ describe('task helpers', () => {
       ['a', 0],
       ['b', 1]
     ])
+  })
+
+  it('sinks finished work without disturbing the open tasks', () => {
+    const tasks: Task[] = [
+      task('a', 'open one', false, 0),
+      task('b', 'open two', false, 1),
+      task('c', 'just finished', true, 2)
+    ]
+
+    expect(sortTaskBands(tasks).map((entry) => [entry.id, entry.order])).toEqual([
+      ['a', 0],
+      ['b', 1],
+      ['c', 2]
+    ])
+
+    const mixed: Task[] = [
+      task('done', 'was done first', true, 0),
+      task('open', 'still open', false, 1),
+      task('fresh', 'just ticked', true, 2)
+    ]
+    expect(sortTaskBands(mixed).map((entry) => entry.id)).toEqual(['open', 'done', 'fresh'])
+  })
+
+  it('keeps carried over work on top, and puts it back there when it is unticked', () => {
+    const carried = { ...task('carried', 'from yesterday', false, 0), carriedFrom: '2026-09-14' }
+    const open = task('open', 'added today', false, 1)
+    const done = task('done', 'finished today', true, 2)
+
+    expect([carried, open, done].map(taskBand)).toEqual([0, 1, 2])
+
+    // Ticking the carried task off sends it to the bottom of the column ...
+    const ticked = sortTaskBands([{ ...carried, completedAt: '2026-09-15T10:00:00.000Z' }, open, done])
+    // both finished tasks share the last band, so they keep their relative order
+    expect(ticked.map((entry) => entry.id)).toEqual(['open', 'carried', 'done'])
+
+    // ... and unticking it must bring it back to the top of the open work, not below it.
+    const unticked = sortTaskBands([open, done, { ...carried, completedAt: null }])
+    expect(unticked.map((entry) => entry.id)).toEqual(['carried', 'open', 'done'])
+  })
+
+  it('restricts a task to its own band and leaves the other days alone', () => {
+    const ordered: Task[] = [
+      { ...task('carried', 'carried', false, 0), carriedFrom: '2026-09-14' },
+      task('open-a', 'open a', false, 1),
+      task('open-b', 'open b', false, 2),
+      task('done', 'done', true, 3)
+    ]
+
+    expect(sortTaskBands(ordered).map((entry) => entry.id)).toEqual([
+      'carried',
+      'open-a',
+      'open-b',
+      'done'
+    ])
+    // An ordinary open task may only land between the carried block and the finished one.
+    expect(bandInsertRange(ordered, 1)).toEqual({ start: 1, end: 3 })
+    expect(bandInsertRange(ordered, 0)).toEqual({ start: 0, end: 1 })
+    expect(bandInsertRange(ordered, 2)).toEqual({ start: 3, end: 4 })
+  })
+
+  it('adds a new task to the end of the open group, above the finished ones', () => {
+    const tasks: Task[] = [
+      task('a', 'open one', false, 0),
+      task('b', 'finished', true, 1),
+      task('c', 'open two', false, 2)
+    ]
+    const added = task('new', 'just added', false, 99)
+
+    // The new row lands directly above the first finished task.
+    expect(insertOpenTask(tasks, added).map((entry) => entry.id)).toEqual(['a', 'new', 'b', 'c'])
+    expect(insertOpenTask(tasks, added).map((entry) => entry.order)).toEqual([0, 1, 2, 3])
+
+    // Nothing finished: a new task is simply appended.
+    const open: Task[] = [task('x', 'only open', false, 0)]
+    expect(insertOpenTask(open, added).map((entry) => entry.id)).toEqual(['x', 'new'])
+
+    // Everything finished: the new task still lands on top of the finished block.
+    const allDone: Task[] = [task('d', 'done', true, 0)]
+    expect(insertOpenTask(allDone, added).map((entry) => entry.id)).toEqual(['new', 'd'])
+
+    // Carried over work stays above the new task, which stays above the finished work.
+    const withCarried: Task[] = [
+      { ...task('c', 'from yesterday', false, 0), carriedFrom: '2026-09-14' },
+      task('o', 'open', false, 1),
+      task('d', 'done', true, 2)
+    ]
+    expect(insertOpenTask(withCarried, added).map((entry) => entry.id)).toEqual(['c', 'o', 'new', 'd'])
   })
 })
 

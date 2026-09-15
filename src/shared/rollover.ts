@@ -18,6 +18,68 @@ export function normalizeTaskOrder(tasks: Task[]): Task[] {
     .map((task, index) => (task.order === index ? task : { ...task, order: index }))
 }
 
+/** Rewrites `order` so the array's own sequence becomes the stored sequence. */
+export function assignSequentialOrder(tasks: Task[]): Task[] {
+  return tasks.map((task, index) => (task.order === index ? task : { ...task, order: index }))
+}
+
+export function isDone(task: Task): boolean {
+  return Boolean(task.completedAt)
+}
+
+/**
+ * Today is kept in three bands:
+ *   0 - carried over from an earlier day and still open, pinned to the top
+ *   1 - ordinary open tasks, the only ones that move freely
+ *   2 - finished tasks, pinned to the bottom
+ */
+export type TaskBand = 0 | 1 | 2
+
+export function taskBand(task: Task): TaskBand {
+  if (isDone(task)) return 2
+  return task.carriedFrom ? 0 : 1
+}
+
+/** Stable three band sort; each band keeps its own relative order. */
+export function sortTaskBands(tasks: Task[]): Task[] {
+  const ordered = normalizeTaskOrder(tasks)
+  const bands: [Task[], Task[], Task[]] = [[], [], []]
+  for (const task of ordered) bands[taskBand(task)].push(task)
+  return assignSequentialOrder([...bands[0], ...bands[1], ...bands[2]])
+}
+
+/** Where a task of `band` may be placed: `start` is the first slot, `end` is one past the last. */
+export function bandInsertRange(tasks: Task[], band: TaskBand): { start: number; end: number } {
+  const bands = tasks.map(taskBand)
+  let start = 0
+  while (start < bands.length && bands[start] < band) start += 1
+  let end = start
+  while (end < bands.length && bands[end] === band) end += 1
+  return { start, end }
+}
+
+/**
+ * Stable regroup: everything matching `isLast` keeps its relative position but moves after the
+ * rest. Ticking a task off sinks it below the open ones, and the day that just ended lifts its
+ * unfinished work with the same helper.
+ */
+export function moveMatchingLast(tasks: Task[], isLast: (task: Task) => boolean): Task[] {
+  const ordered = normalizeTaskOrder(tasks)
+  return assignSequentialOrder([...ordered.filter((task) => !isLast(task)), ...ordered.filter(isLast)])
+}
+
+/**
+ * Adds a task to the end of its own band: a new task joins the open work, directly above the
+ * finished ones and below anything carried over from an earlier day.
+ */
+export function insertOpenTask(tasks: Task[], task: Task): Task[] {
+  const ordered = normalizeTaskOrder(tasks)
+  const insertAt = bandInsertRange(ordered, taskBand(task)).end
+  const next = ordered.slice()
+  next.splice(insertAt, 0, task)
+  return assignSequentialOrder(next)
+}
+
 export function findTask(days: Record<DateKey, Task[]>, id: string): { dateKey: DateKey; task: Task } | null {
   for (const [dateKey, tasks] of Object.entries(days)) {
     const task = tasks.find((candidate) => candidate.id === id)
@@ -36,8 +98,9 @@ export interface AdvanceResult {
 /**
  * Rolls the board forward day by day until `currentKey` becomes today.
  * - next day's plan (completed or not) becomes the new today
- * - unfinished tasks from the ending day are copied to the new today, on top
- * - the ending day keeps its original tasks, unfinished ones flagged `movedToToday`
+ * - unfinished tasks from the ending day are copied to the new today, above the plan
+ * - the ending day keeps its tasks with the unfinished ones on top, flagged `movedToToday`,
+ *   and the ones that were already ticked off below them
  * - days older than the retention window are dropped (future buckets are kept)
  */
 export function advanceDays(
@@ -56,25 +119,20 @@ export function advanceDays(
   while (todayKey < currentKey) {
     const endingKey = todayKey
     const nextKey = addDays(endingKey, 1)
-    const endingTasks = days[endingKey] ?? []
-    const plannedTasks = days[nextKey] ?? []
+    const endingTasks = normalizeTaskOrder(days[endingKey] ?? [])
+    const plannedTasks = normalizeTaskOrder(days[nextKey] ?? [])
 
-    days[endingKey] = endingTasks.map((task) =>
-      task.completedAt ? task : { ...task, movedToToday: true }
+    // The day that just ended is frozen: what never got done moves to the top, so it reads as
+    // "these slipped into today", and the finished work settles underneath.
+    days[endingKey] = moveMatchingLast(
+      endingTasks.map((task) => (isDone(task) ? task : { ...task, movedToToday: true })),
+      isDone
     )
 
-    const carried = endingTasks
-      .filter((task) => !task.completedAt)
-      .map((task) => ({
-        ...task,
-        id: newId(),
-        completedAt: null,
-        movedToToday: undefined,
-        carriedFrom: task.carriedFrom ?? endingKey,
-        order: 0
-      }))
+    const carried = endingTasks.filter((task) => !isDone(task)).map((task) => carryTask(task, endingKey))
 
-    days[nextKey] = normalizeTaskOrder([...carried, ...plannedTasks])
+    // Carried work keeps the top of the new day, above everything that was planned for it.
+    days[nextKey] = assignSequentialOrder([...carried, ...plannedTasks])
     todayKey = nextKey
     advancedDays += 1
   }
@@ -91,6 +149,18 @@ export function advanceDays(
   }
 
   return { days, todayKey, advancedDays, purged }
+}
+
+/** Copies a task into the next day, remembering the day it originally slipped away from. */
+function carryTask(task: Task, endingKey: DateKey): Task {
+  const carried: Task = {
+    ...task,
+    id: newId(),
+    completedAt: null,
+    carriedFrom: task.carriedFrom ?? endingKey
+  }
+  delete carried.movedToToday
+  return carried
 }
 
 export interface NormalizedStore {

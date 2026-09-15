@@ -7,12 +7,14 @@ import type { Task } from '../../../shared/types'
 interface Props {
   task: Task
   readOnly: boolean
+  /** Only the day being worked on offers a check box; the plan and the frozen day do not. */
+  showCheck: boolean
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onEdit: (id: string, text: string) => void
 }
 
-export function TaskRow({ task, readOnly, onToggle, onDelete, onEdit }: Props) {
+export function TaskRow({ task, readOnly, showCheck, onToggle, onDelete, onEdit }: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(task.text)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -44,25 +46,30 @@ export function TaskRow({ task, readOnly, onToggle, onDelete, onEdit }: Props) {
     <li
       ref={setNodeRef}
       className="task"
+      data-task-id={task.id}
       data-done={done ? 'true' : 'false'}
       data-dragging={isDragging ? 'true' : 'false'}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       {...attributes}
       {...listeners}
     >
-      <button
-        type="button"
-        className="task__check"
-        aria-label={done ? 'Mark as not done' : 'Mark as done'}
-        aria-pressed={done}
-        disabled={readOnly}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => onToggle(task.id)}
-      >
-        <svg viewBox="0 0 24 24">
-          <path d="M5.5 12.6l4.2 4.2L18.6 7.6" />
-        </svg>
-      </button>
+      {showCheck ? (
+        <button
+          type="button"
+          className="task__check"
+          aria-label={done ? 'Mark as not done' : 'Mark as done'}
+          aria-pressed={done}
+          disabled={readOnly}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onToggle(task.id)}
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M5.5 12.6l4.2 4.2L18.6 7.6" />
+          </svg>
+        </button>
+      ) : (
+        <span className="task__bullet" aria-hidden="true" data-done={done ? 'true' : 'false'} />
+      )}
 
       <div className="task__body">
         {editing ? (
@@ -93,12 +100,14 @@ export function TaskRow({ task, readOnly, onToggle, onDelete, onEdit }: Props) {
             {task.text}
           </span>
         )}
-        {task.carriedFrom && !editing ? (
+        {task.carriedFrom && !done && !editing ? (
           <span className="task__chip" title={`Carried over from ${formatMonthDay(task.carriedFrom)}`}>
             carried over
           </span>
         ) : null}
-        {task.movedToToday && !editing ? <span className="task__chip task__chip--moved">moved to today</span> : null}
+        {task.movedToToday && !done && !editing ? (
+          <span className="task__chip task__chip--moved">moved to today</span>
+        ) : null}
       </div>
 
       {readOnly ? null : (
@@ -118,10 +127,14 @@ export function TaskRow({ task, readOnly, onToggle, onDelete, onEdit }: Props) {
   )
 }
 
-export function TaskPreview({ task }: { task: Task }) {
+export function TaskPreview({ task, width }: { task: Task; width?: number }) {
   return (
-    <li className="task task--overlay" data-done={task.completedAt ? 'true' : 'false'}>
-      <span className="task__check task__check--ghost">
+    <li
+      className="task task--overlay"
+      data-done={task.completedAt ? 'true' : 'false'}
+      style={width ? { width } : undefined}
+    >
+      <span className="task__check task__check--ghost" aria-hidden="true">
         <svg viewBox="0 0 24 24">
           <path d="M5.5 12.6l4.2 4.2L18.6 7.6" />
         </svg>

@@ -6,10 +6,17 @@ import { loadStoreFile, writeStoreFile } from './persist'
 import {
   RETENTION_DAYS,
   advanceDays,
+  assignSequentialOrder,
+  bandInsertRange,
   clampTaskText,
   findTask,
+  insertOpenTask,
+  isDone,
+  moveMatchingLast,
   normalizeTaskOrder,
-  resolveCurrentDateKey
+  resolveCurrentDateKey,
+  sortTaskBands,
+  taskBand
 } from '../shared/rollover'
 import type {
   AppNotice,
@@ -37,6 +44,18 @@ const EMPTY_BACKDROP: BackdropInfo = {
 }
 
 export type StateListener = (snapshot: Snapshot) => void
+
+/**
+ * A day that is over is always presented as "what slipped stays on top": the unfinished tasks
+ * first, the finished ones below them. New days are written in that shape when they are frozen
+ * at rollover; this also covers days that were recorded under an older version, so History and
+ * the Yesterday column agree. Only the display is rearranged — the stored order is untouched.
+ *
+ * Today is deliberately left alone: there the user's own drag order wins.
+ */
+function freezeOrder(tasks: Task[], frozen: boolean): Task[] {
+  return frozen ? moveMatchingLast(tasks, isDone) : tasks
+}
 
 export class TodoState {
   private readonly file: string
@@ -108,12 +127,17 @@ export class TodoState {
     return this.data.settings
   }
 
+  /** Where the widget actually ended up: `workerw` when the desktop layer accepted it. */
+  get desktopLayerMode(): Snapshot['desktopLayer'] {
+    return this.desktopLayer
+  }
+
   markEditable(dateKey: DateKey): boolean {
     return dateKey === this.data.todayKey || dateKey === addDays(this.data.todayKey, 1)
   }
 
   private column(id: ColumnId, label: string, dateKey: DateKey, readOnly: boolean): ColumnView {
-    const tasks = normalizeTaskOrder(this.data.days[dateKey] ?? [])
+    const tasks = freezeOrder(normalizeTaskOrder(this.data.days[dateKey] ?? []), readOnly)
     return {
       id,
       label,
@@ -149,7 +173,7 @@ export class TodoState {
     const days: HistoryDay[] = []
     for (let offset = 1; offset < RETENTION_DAYS; offset += 1) {
       const dateKey = addDays(todayKey, -offset)
-      const tasks = normalizeTaskOrder(this.data.days[dateKey] ?? [])
+      const tasks = freezeOrder(normalizeTaskOrder(this.data.days[dateKey] ?? []), true)
       days.push({
         dateKey,
         label: formatFullDate(dateKey),
@@ -175,7 +199,10 @@ export class TodoState {
       completedAt: null,
       order: tasks.length
     }
-    this.data.days[dateKey] = [...tasks, task]
+    // Today keeps its finished tasks at the bottom, so a new task joins the open group instead
+    // of landing underneath the crossed out ones. The next day's plan is a plain list.
+    this.data.days[dateKey] =
+      dateKey === this.data.todayKey ? insertOpenTask(tasks, task) : assignSequentialOrder([...tasks, task])
     this.commit()
   }
 
@@ -196,9 +223,14 @@ export class TodoState {
   toggleTask(id: string): void {
     const found = findTask(this.data.days, id)
     if (!found || !this.markEditable(found.dateKey)) return
-    this.data.days[found.dateKey] = (this.data.days[found.dateKey] ?? []).map((task) =>
+    const toggled = (this.data.days[found.dateKey] ?? []).map((task) =>
       task.id === id ? { ...task, completedAt: task.completedAt ? null : new Date().toISOString() } : task
     )
+    // Today re-sorts into its bands: carried work stays on top, the finished task drops to the
+    // bottom, and unticking puts a carried task back where it belongs instead of at the end of
+    // the ordinary open list.
+    this.data.days[found.dateKey] =
+      found.dateKey === this.data.todayKey ? sortTaskBands(toggled) : normalizeTaskOrder(toggled)
     this.commit()
   }
 
@@ -215,18 +247,33 @@ export class TodoState {
     const found = findTask(this.data.days, id)
     if (!found || !this.markEditable(found.dateKey) || !this.markEditable(toDateKey)) return
 
+    // Badges travel with the task: dragging never clears "carried over", only ticking it off does.
     const moving: Task = { ...found.task }
-    delete moving.carriedFrom
-    delete moving.movedToToday
 
-    const source = (this.data.days[found.dateKey] ?? []).filter((task) => task.id !== id)
-    const target = found.dateKey === toDateKey ? source : (this.data.days[toDateKey] ?? []).slice()
-    const index = Math.max(0, Math.min(Math.round(toIndex), target.length))
-    target.splice(index, 0, moving)
+    const source = normalizeTaskOrder(
+      (this.data.days[found.dateKey] ?? []).filter((task) => task.id !== id)
+    )
+    const target =
+      found.dateKey === toDateKey ? source : normalizeTaskOrder(this.data.days[toDateKey] ?? [])
+    const index = this.placementIndex(target, moving, toIndex, toDateKey)
+    const next = target.slice()
+    next.splice(index, 0, moving)
 
-    this.data.days[found.dateKey] = normalizeTaskOrder(source)
-    this.data.days[toDateKey] = normalizeTaskOrder(target)
+    this.data.days[found.dateKey] = source
+    this.data.days[toDateKey] = assignSequentialOrder(next)
     this.commit()
+  }
+
+  /**
+   * Today only allows a task inside its own band: carried over work stays on top, finished work
+   * stays at the bottom, and the ordinary open tasks are the ones you can order freely. Any
+   * other day is a plain list and accepts the drop as it comes.
+   */
+  private placementIndex(target: Task[], moving: Task, requested: number, dateKey: DateKey): number {
+    const wanted = Math.max(0, Math.round(Number.isFinite(requested) ? requested : 0))
+    if (dateKey !== this.data.todayKey) return Math.min(wanted, target.length)
+    const { start, end } = bandInsertRange(target, taskBand(moving))
+    return Math.min(Math.max(wanted, start), end)
   }
 
   patchSettings(patch: Partial<Settings>): void {
@@ -258,6 +305,7 @@ export class TodoState {
   }
 
   setDesktopLayer(layer: Snapshot['desktopLayer']): void {
+    if (this.desktopLayer === layer) return
     this.desktopLayer = layer
     this.emit()
   }
