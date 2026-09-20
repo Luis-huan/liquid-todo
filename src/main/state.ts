@@ -12,9 +12,11 @@ import {
   findTask,
   insertOpenTask,
   isDone,
+  mergeFutureDates,
   moveMatchingLast,
   normalizeTaskOrder,
   resolveCurrentDateKey,
+  sameDates,
   sortTaskBands,
   taskBand
 } from '../shared/rollover'
@@ -71,6 +73,18 @@ export class TodoState {
   constructor(private readonly fakeDate: string | null) {
     this.file = join(app.getPath('userData'), 'data.json')
     this.data = this.load()
+    this.healFutureDates()
+  }
+
+  /**
+   * Puts back days that earlier versions dropped from the Future list while their tasks stayed in
+   * the store, and writes the repaired board straight away so it cannot be lost again.
+   */
+  private healFutureDates(): void {
+    const healed = mergeFutureDates(this.data.days, this.data.todayKey, this.data.futureDates)
+    if (sameDates(healed, this.data.futureDates)) return
+    this.data = { ...this.data, futureDates: healed }
+    this.saveNow()
   }
 
   // ---------------------------------------------------------------- persistence
@@ -115,12 +129,12 @@ export class TodoState {
     if (this.data.todayKey === currentKey) return false
     if (this.data.todayKey > currentKey) return false
 
-    const result = advanceDays(this.data.todayKey, this.data.days, currentKey)
+    const result = advanceDays(this.data.todayKey, this.data.days, currentKey, this.data.futureDates)
     this.data = {
       ...this.data,
       todayKey: result.todayKey,
       days: result.days,
-      futureDates: result.futureDates
+      futureDates: mergeFutureDates(result.days, result.todayKey, result.futureDates)
     }
     this.saveNow()
     this.emit()

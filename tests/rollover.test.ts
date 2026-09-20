@@ -5,6 +5,7 @@ import {
   clampTaskText,
   createEmptyStore,
   insertOpenTask,
+  mergeFutureDates,
   normalizeFutureDates,
   normalizeStore,
   normalizeTaskOrder,
@@ -146,6 +147,21 @@ describe('midnight rollover', () => {
 
     expect(result.todayKey).toBe('2026-09-22')
     expect(result.futureDates).toEqual(['2026-09-24'])
+  })
+
+  it('keeps the picked days through a rollover instead of dropping the whole list', () => {
+    const days: Record<string, Task[]> = {
+      '2026-09-20': [task('a', 'open today', false, 0)],
+      '2026-09-23': [task('b', 'picked day', false, 0)],
+      '2026-12-01': [task('c', 'far away', false, 0)]
+    }
+    const picked = ['2026-09-23', '2026-12-01']
+
+    const result = advanceDays('2026-09-20', days, '2026-09-21', picked)
+
+    // 9/23 is now the Tomorrow row, 12/1 stays picked, and nothing else is dropped.
+    expect(result.futureDates).toEqual(['2026-09-23', '2026-12-01'])
+    expect(result.days['2026-12-01'].map((entry) => entry.text)).toEqual(['far away'])
   })
 
   it('does not duplicate a task that is completed mid-way', () => {
@@ -326,6 +342,36 @@ describe('store normalisation', () => {
       normalizeFutureDates(['2026-09-25', '2026-09-20', '2026-09-20', '2026-09-10', 'nope'], '2026-09-18')
     ).toEqual(['2026-09-20', '2026-09-25'])
     expect(normalizeFutureDates(undefined, '2026-09-18')).toEqual([])
+  })
+
+  it('puts back picked days that a rollover of 1.3.0 left behind', () => {
+    const days: Record<string, Task[]> = {
+      '2026-09-19': [task('past', 'yesterday', false, 0)],
+      '2026-09-20': [task('today', 'today', false, 0)],
+      '2026-09-21': [task('tomorrow', 'tomorrow row', false, 0)],
+      '2026-09-22': [],
+      '2026-10-06': [task('a', 'geometry homework', false, 0)],
+      '2026-11-11': [task('b', 'design quiz', false, 0)],
+      '2026-12-01': [task('c', 'geometry final', false, 0)]
+    }
+
+    // The board arrived with a single picked day left, the rest of the list having been wiped.
+    const healed = mergeFutureDates(days, '2026-09-20', ['2026-09-23'])
+
+    expect(healed).toEqual(['2026-09-23', '2026-10-06', '2026-11-11', '2026-12-01'])
+    // Today, tomorrow and the past are never turned into rows, and empty days stay out.
+    expect(healed).not.toContain('2026-09-20')
+    expect(healed).not.toContain('2026-09-21')
+    expect(healed).not.toContain('2026-09-22')
+  })
+
+  it('leaves a healthy list untouched and never invents days that are not there', () => {
+    const days: Record<string, Task[]> = { '2026-10-06': [task('a', 'kept', false, 0)] }
+    expect(mergeFutureDates(days, '2026-09-20', ['2026-10-06'])).toEqual(['2026-10-06'])
+    // A picked day with no tasks stays picked: only removing it in the app takes it off the list.
+    expect(mergeFutureDates({}, '2026-09-20', ['2026-10-06'])).toEqual(['2026-10-06'])
+    // Nothing stored and nothing picked leaves nothing to show.
+    expect(mergeFutureDates({}, '2026-09-20', [])).toEqual([])
   })
 
   it('reads picked days from an older store and repairs what it cannot use', () => {

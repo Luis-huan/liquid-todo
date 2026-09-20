@@ -246,6 +246,29 @@ export function normalizeFutureDates(value: unknown, todayKey: DateKey): DateKey
     .filter((key, index, all) => index === 0 || all[index - 1] !== key)
 }
 
+/**
+ * The days that belong on the Future list: everything the user picked, plus any day beyond
+ * tomorrow that already carries tasks of its own.
+ *
+ * The second half repairs boards written by 1.3.0, where a rollover dropped the picked list while
+ * the tasks stayed behind in `days`, which left them invisible with no row to sit under. It only
+ * ever adds days, so it can never undo a day the user removed.
+ */
+export function mergeFutureDates(
+  days: Record<DateKey, Task[]>,
+  todayKey: DateKey,
+  futureDates: DateKey[]
+): DateKey[] {
+  const tomorrowKey = addDays(todayKey, 1)
+  const withTasks = Object.entries(days)
+    .filter(([dateKey, tasks]) => isValidDateKey(dateKey) && dateKey > tomorrowKey && tasks.length > 0)
+    .map(([dateKey]) => dateKey)
+  return normalizeFutureDates([...futureDates, ...withTasks], todayKey)
+}
+
+export function sameDates(a: DateKey[], b: DateKey[]): boolean {
+  return a.length === b.length && a.every((key, index) => key === b[index])
+}
 
 /** Coerces unknown JSON into a usable store; reports whether the payload looked corrupt. */
 export function normalizeStore(raw: unknown, todayKey: DateKey): NormalizedStore {
