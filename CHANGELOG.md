@@ -2,6 +2,50 @@
 
 Notable changes to Liquid Todo. The version of the installed app matches the installer version.
 
+## 1.3.1 - 2026-09-20
+
+### Fixed
+
+- Days picked for the Future list disappeared once midnight passed: the rollover dropped the list
+  of picked days while their tasks stayed behind, so the rows vanished from Future and the days
+  stopped being ticked in the calendar. The picked days now travel through the rollover and only
+  leave the list when the day itself becomes Today.
+- Boards that already lost their picked days repair themselves on start: any day beyond tomorrow
+  that still has tasks is put back on the Future list, and the repaired board is written straight
+  away. Days that were picked but never given a task left no trace, so those need one click in the
+  calendar to come back.
+- The calendar now marks the days already on the Future list with a small ✓ on a tinted cell
+  (Tomorrow keeps its ring), so an added day is recognisable at a glance.
+
+## 1.3.0 - 2026-09-18
+
+### Added
+
+- **Future column**, which replaces the old Next day column. Tomorrow is pinned to the top with
+  its own tasks, and the days you pick from the calendar are listed below it in date order. Every
+  day has its own **+** for adding a task to that day, its tasks sit underneath it, and a task can
+  be dragged between days or between a day and Today, which reschedules it.
+- **Calendar window**. The header button in Future opens a small month calendar; pick a day and it
+  joins the Future list and the window closes. Today and earlier are not selectable, Tomorrow and
+  the days already on the list are marked.
+- Removing a day: hovering a picked day reveals a small **✕**. An empty day goes straight away; a
+  day with tasks asks first, in a one line confirmation inside that row.
+
+### Changed
+
+- The board now keeps its data in `D:\缓存数据\To do list` instead of the C drive. The first run
+  after this update moves the existing board file across and removes the old profile folder. If
+  that folder cannot be used, the board falls back to the default location and says so once.
+- A day picked for the Future list joins Tomorrow when midnight reaches the day before it, and its
+  tasks become that day's plan: what slipped from the day before stays on top, exactly as it does
+  with the Tomorrow row today.
+- The Future header shows no counters, and no longer carries a date of its own.
+
+### Fixed
+
+- History's "Nothing recorded." line is indented to the task text, so its first letter no longer
+  sits on the glass edge.
+
 ## 1.2.0 - 2026-09-15
 
 ### Added

@@ -7,7 +7,7 @@ Written with Electron, React and TypeScript. No account, no cloud, no network ca
 
 ## Features
 
-- **Three day columns** - Yesterday (read only), Today and Next day.
+- **Three day columns** - Yesterday (read only), Today and Future.
 - **Drag and drop** tasks inside a column or across days. Only Today has check boxes: tick a task
   off and it drops to the bottom of the column, while new tasks join the open work above the
   finished ones. Today keeps three bands - work carried over from an earlier day at the top,
@@ -21,6 +21,14 @@ Written with Electron, React and TypeScript. No account, no cloud, no network ca
 - **History window** - the last six days, each behind a dividing rule with a centred, bolded
   date and its done/total count. Like the Yesterday column, a finished day shows what was left
   undone above what got done, including days recorded by an earlier version.
+- **Future column** - Tomorrow is pinned to the top with its own tasks, and the days you pick from
+  the calendar are listed below it in date order. Each day has its own `+` for adding tasks, a
+  hover `✕` to drop a day you no longer need, and tasks can be dragged between days or to and from
+  Today to reschedule them. A picked day stays on the list through midnight and only leaves it
+  once that day becomes Today, which is when its tasks move over.
+- **Calendar window** - opens from the Future header: pick a day, it joins the list and the window
+  closes. Today and earlier are not selectable; Tomorrow and the days already on the list are
+  marked (a ring for Tomorrow, a ✓ for days on the list) so a day cannot be added twice.
 - **Liquid glass** - every panel samples the wallpaper under its own position, so the blur and
   the refraction line up with the real desktop. All Windows wallpaper fit modes are honoured
   (fill, fit, stretch, center, span, tile).
@@ -53,7 +61,8 @@ The installer is not code signed, so Windows SmartScreen may warn the first time
 - Left click the tray icon to show or hide the widget, right click for the menu.
 - Changed your wallpaper? Tray menu then *Refresh backdrop*.
 - Tasks are windowed to a rolling week; anything older falls out of history.
-- Uninstalling leaves your data in place. It lives in `%APPDATA%\liquid-todo\data.json`.
+- Uninstalling leaves your data in place. It lives in `D:\缓存数据\To do list\data.json` (the
+  first run of 1.3.0 moves it there from `%APPDATA%\liquid-todo` and clears the old folder).
 
 ## Development
 
