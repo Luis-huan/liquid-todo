@@ -10,11 +10,11 @@ import {
   type DragOverEvent,
   type DragStartEvent
 } from '@dnd-kit/core'
-import type { ColumnView, Snapshot, Task } from '../../shared/types'
+import type { ColumnView, FutureRow, Snapshot, Task } from '../../shared/types'
 import { api } from './api'
 import { ColumnPanel } from './components/ColumnPanel'
 import { GlassFilters } from './components/GlassSurface'
-
+import { FuturePanel } from './components/FuturePanel'
 import { ResizeHandles } from './components/ResizeHandles'
 import { TaskPreview } from './components/TaskRow'
 import { useWindowFrame } from './hooks/useWindowFrame'
@@ -26,6 +26,7 @@ const FALLBACK_DISPLAY = { width: 1920, height: 1080 }
 export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [columns, setColumns] = useState<ColumnView[]>([])
+  const [future, setFuture] = useState<FutureRow[]>([])
   const [image, setImage] = useState<ImageSize | null>(null)
   const [activeTask, setActiveTask] = useState<Task | null>(null)
   const [activeWidth, setActiveWidth] = useState<number | null>(null)
@@ -39,7 +40,9 @@ export default function App() {
   const applySnapshot = useCallback(
     (next: Snapshot) => {
       setSnapshot(next)
-      if (!interacting.current) setColumns(next.columns)
+      if (interacting.current) return
+      setColumns(next.columns)
+      setFuture(next.future)
     },
     [interacting]
   )
@@ -100,15 +103,68 @@ export default function App() {
   const openHistory = useCallback(() => {
     void api.openHistory()
   }, [])
+  const openCalendar = useCallback(() => {
+    void api.openCalendar()
+  }, [])
+  const removeFutureDate = useCallback((dateKey: string) => {
+    void api.removeFutureDate(dateKey)
+  }, [])
 
   // ------------------------------------------------------------- drag and drop
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
-  const findColumn = useCallback(
-    (id: string): ColumnView | undefined =>
-      columns.find((column) => column.dateKey === id || column.tasks.some((task) => task.id === id)),
-    [columns]
+  /** Every drop target on the board, the two fixed columns and each day of the Future list. */
+  interface Container {
+    dateKey: string
+    tasks: Task[]
+    readOnly: boolean
+  }
+
+  const containers = useMemo<Container[]>(
+    () => [
+      ...columns.map((column) => ({
+        dateKey: column.dateKey,
+        tasks: column.tasks,
+        readOnly: column.readOnly
+      })),
+      ...future.map((row) => ({ dateKey: row.dateKey, tasks: row.tasks, readOnly: false }))
+    ],
+    [columns, future]
+  )
+
+  const findContainer = useCallback(
+    (id: string): Container | undefined =>
+      containers.find(
+        (container) => container.dateKey === id || container.tasks.some((task) => task.id === id)
+      ),
+    [containers]
+  )
+
+  /** Applies one move to the local board so the drop lands before the server answers. */
+  const moveLocally = useCallback(
+    (fromKey: string, toKey: string, taskId: string, overId: string | null) => {
+      const moved = containers
+        .find((container) => container.dateKey === fromKey)
+        ?.tasks.find((task) => task.id === taskId)
+      if (!moved) return
+
+      const update = (tasks: Task[], dateKey: string): Task[] => {
+        if (dateKey === fromKey) return tasks.filter((task) => task.id !== taskId)
+        if (dateKey !== toKey) return tasks
+        const overIndex = overId ? tasks.findIndex((task) => task.id === overId) : -1
+        const insertAt = overIndex === -1 ? tasks.length : overIndex
+        const next = tasks.slice()
+        next.splice(insertAt, 0, moved)
+        return next
+      }
+
+      setColumns((previous) =>
+        previous.map((column) => ({ ...column, tasks: update(column.tasks, column.dateKey) }))
+      )
+      setFuture((previous) => previous.map((row) => ({ ...row, tasks: update(row.tasks, row.dateKey) })))
+    },
+    [containers]
   )
 
   /**
@@ -117,9 +173,9 @@ export default function App() {
    */
   const dropIndex = useCallback(
     (dateKey: string, draggedId: string, translated: { top: number; height: number } | null): number => {
-      const list = document.querySelector(`[data-date="${dateKey}"] .panel__list`)
-      if (!list) return -1
-      const rows = Array.from(list.querySelectorAll<HTMLElement>('.task')).filter(
+      const container = document.querySelector(`[data-date="${dateKey}"]`)
+      if (!container) return -1
+      const rows = Array.from(container.querySelectorAll<HTMLElement>('.task')).filter(
         (row) => row.dataset.taskId !== draggedId
       )
       if (!translated) return rows.length
@@ -135,8 +191,8 @@ export default function App() {
   )
 
   const onDragStart = (event: DragStartEvent): void => {
-    const column = findColumn(String(event.active.id))
-    setActiveTask(column?.tasks.find((task) => task.id === event.active.id) ?? null)
+    const container = findContainer(String(event.active.id))
+    setActiveTask(container?.tasks.find((task) => task.id === event.active.id) ?? null)
     // The floating card copies the width of the row it came from, so it can never grow past the
     // glass edge of a narrow column.
     setActiveWidth(Math.round(event.active.rect.current.initial?.width ?? 0) || null)
@@ -145,26 +201,10 @@ export default function App() {
   const onDragOver = (event: DragOverEvent): void => {
     const { active, over } = event
     if (!over) return
-    const from = findColumn(String(active.id))
-    const to = findColumn(String(over.id))
+    const from = findContainer(String(active.id))
+    const to = findContainer(String(over.id))
     if (!from || !to || from.dateKey === to.dateKey || to.readOnly) return
-    setColumns((previous) =>
-      previous.map((column) => {
-        if (column.dateKey === from.dateKey) {
-          return { ...column, tasks: column.tasks.filter((task) => task.id !== active.id) }
-        }
-        if (column.dateKey === to.dateKey) {
-          const moved = from.tasks.find((task) => task.id === active.id)
-          if (!moved) return column
-          const overIndex = column.tasks.findIndex((task) => task.id === String(over.id))
-          const insertAt = overIndex === -1 ? column.tasks.length : overIndex
-          const next = column.tasks.slice()
-          next.splice(insertAt, 0, moved)
-          return { ...column, tasks: next }
-        }
-        return column
-      })
-    )
+    moveLocally(from.dateKey, to.dateKey, String(active.id), String(over.id))
   }
 
   const onDragEnd = (event: DragEndEvent): void => {
@@ -172,11 +212,14 @@ export default function App() {
     setActiveTask(null)
     setActiveWidth(null)
     const activeId = String(active.id)
-    const from = findColumn(activeId)
-    const to = over ? findColumn(String(over.id)) ?? from : from
+    const from = findContainer(activeId)
+    const to = over ? findContainer(String(over.id)) ?? from : from
 
     if (!from || !to || !over) {
-      if (snapshot) setColumns(snapshot.columns)
+      if (snapshot) {
+        setColumns(snapshot.columns)
+        setFuture(snapshot.future)
+      }
       return
     }
 
@@ -192,7 +235,10 @@ export default function App() {
   const onDragCancel = (): void => {
     setActiveTask(null)
     setActiveWidth(null)
-    if (snapshot) setColumns(snapshot.columns)
+    if (snapshot) {
+      setColumns(snapshot.columns)
+      setFuture(snapshot.future)
+    }
   }
 
   const backdrop = useMemo(
@@ -238,6 +284,18 @@ export default function App() {
               onOpenHistory={openHistory}
             />
           ))}
+          <FuturePanel
+            rows={future}
+            backdrop={backdrop}
+            image={image}
+            windowBounds={bounds ?? backdrop.windowBounds}
+            onHeaderPointerDown={beginDrag}
+            onOpenCalendar={openCalendar}
+            onAdd={addTask}
+            onDelete={deleteTask}
+            onEdit={editTask}
+            onRemoveDate={removeFutureDate}
+          />
         </div>
         <DragOverlay dropAnimation={null}>
           {activeTask ? <TaskPreview task={activeTask} width={activeWidth ?? undefined} /> : null}

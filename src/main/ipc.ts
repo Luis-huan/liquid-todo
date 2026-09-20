@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, screen, type IpcMainInvokeEvent } from 'electron'
 import type { DateKey, Rect, ResizeAnchor, Settings, Snapshot } from '../shared/types'
-import { MAIN_MIN_SIZE, HISTORY_MIN_SIZE } from './windows'
+import { CALENDAR_SIZE, MAIN_MIN_SIZE, HISTORY_MIN_SIZE } from './windows'
 import { windowRole } from './windowRoles'
 import type { TodoState } from './state'
 
@@ -17,6 +17,8 @@ export interface IpcContext {
   snapshotFor: (win: BrowserWindow | null) => Snapshot
   openHistory: () => void
   closeHistory: () => void
+  openCalendar: () => void
+  closeCalendar: () => void
   refreshBackdrop: () => Promise<void>
   applyDesktopLayer: (requested: Settings['desktopLayer']) => Promise<void>
   /** Called once a move or resize gesture has finished. */
@@ -29,11 +31,17 @@ function senderWindow(event: IpcMainInvokeEvent): BrowserWindow | null {
 }
 
 function minSizeFor(win: BrowserWindow): { width: number; height: number } {
-  return windowRole(win) === 'history' ? HISTORY_MIN_SIZE : MAIN_MIN_SIZE
+  const role = windowRole(win)
+  if (role === 'history') return HISTORY_MIN_SIZE
+  if (role === 'calendar') return CALENDAR_SIZE
+  return MAIN_MIN_SIZE
 }
 
-function boundsKey(win: BrowserWindow): 'historyWindow' | 'mainWindow' {
-  return windowRole(win) === 'history' ? 'historyWindow' : 'mainWindow'
+function boundsKey(win: BrowserWindow): 'historyWindow' | 'calendarWindow' | 'mainWindow' {
+  const role = windowRole(win)
+  if (role === 'history') return 'historyWindow'
+  if (role === 'calendar') return 'calendarWindow'
+  return 'mainWindow'
 }
 
 function computeResize(
@@ -67,6 +75,8 @@ export function registerIpc(context: IpcContext): void {
   ipcMain.handle('history:get', () => context.state.history())
   ipcMain.handle('history:open', () => context.openHistory())
   ipcMain.handle('history:close', () => context.closeHistory())
+  ipcMain.handle('calendar:open', () => context.openCalendar())
+  ipcMain.handle('calendar:close', () => context.closeCalendar())
   ipcMain.handle('backdrop:refresh', () => context.refreshBackdrop())
   ipcMain.handle('app:quit', () => app.quit())
 
@@ -84,6 +94,12 @@ export function registerIpc(context: IpcContext): void {
   })
   ipcMain.handle('task:move', (_event, id: string, toDateKey: DateKey, toIndex: number) => {
     state.moveTask(id, toDateKey, toIndex)
+  })
+  ipcMain.handle('future:add', (_event, dateKey: DateKey) => {
+    state.addFutureDate(dateKey)
+  })
+  ipcMain.handle('future:remove', (_event, dateKey: DateKey) => {
+    state.removeFutureDate(dateKey)
   })
 
   ipcMain.handle('settings:patch', async (_event, patch: Partial<Settings>) => {

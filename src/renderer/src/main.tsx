@@ -5,10 +5,12 @@ import './styles/base.css'
 import './styles/glass.css'
 import './styles/app.css'
 import App from './App'
+import CalendarApp from './CalendarApp'
 import HistoryApp from './HistoryApp'
 
 const container = document.getElementById('root')
 if (container) {
-  const isHistory = window.location.hash.replace('#', '') === 'history'
-  createRoot(container).render(<StrictMode>{isHistory ? <HistoryApp /> : <App />}</StrictMode>)
+  const page = window.location.hash.replace('#', '')
+  const view = page === 'history' ? <HistoryApp /> : page === 'calendar' ? <CalendarApp /> : <App />
+  createRoot(container).render(<StrictMode>{view}</StrictMode>)
 }

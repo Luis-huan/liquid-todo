@@ -7,6 +7,7 @@ import { setWindowRole } from './windowRoles'
 
 export const MAIN_MIN_SIZE = { width: 660, height: 300 }
 export const HISTORY_MIN_SIZE = { width: 300, height: 320 }
+export const CALENDAR_SIZE = { width: 300, height: 370 }
 
 const PRELOAD = join(__dirname, '../preload/index.js')
 
@@ -132,5 +133,30 @@ export function createHistoryWindow(state: TodoState): BrowserWindow {
   })
   loadWindow(win, '#history')
   setWindowRole(win, 'history')
+  return win
+}
+
+/** The calendar opens beside the board, on the side the Future column lives. */
+export function resolveCalendarBounds(state: TodoState): Rect {
+  const saved = state.settings.calendarWindow
+  if (saved.x < 0 || saved.y < 0) {
+    const main = resolveMainBounds(state)
+    return clamp({ x: main.x + main.width + 18, y: main.y, ...CALENDAR_SIZE }, CALENDAR_SIZE)
+  }
+  return clamp({ ...saved, ...CALENDAR_SIZE }, CALENDAR_SIZE)
+}
+
+export function createCalendarWindow(state: TodoState): BrowserWindow {
+  const bounds = resolveCalendarBounds(state)
+  const win = new BrowserWindow({
+    ...baseOptions(bounds),
+    minWidth: CALENDAR_SIZE.width,
+    minHeight: CALENDAR_SIZE.height,
+    maxWidth: CALENDAR_SIZE.width,
+    maxHeight: CALENDAR_SIZE.height,
+    resizable: false
+  })
+  loadWindow(win, '#calendar')
+  setWindowRole(win, 'calendar')
   return win
 }

@@ -51,6 +51,6 @@ describe('store persistence', () => {
     const result = loadStoreFile(file, '2026-09-10')
     expect(result.corrupt).toBe(false)
     expect(result.repaired).toBe(false)
-    expect(result.store.version).toBe(3)
+    expect(result.store.version).toBe(4)
   })
 })

@@ -11,11 +11,19 @@ const api: LiquidTodoApi = {
   deleteTask: (id: string) => ipcRenderer.invoke('task:delete', id),
   moveTask: (id: string, toDateKey: DateKey, toIndex: number) =>
     ipcRenderer.invoke('task:move', id, toDateKey, toIndex),
+  addFutureDate: (dateKey: DateKey) => ipcRenderer.invoke('future:add', dateKey),
+  removeFutureDate: (dateKey: DateKey) => ipcRenderer.invoke('future:remove', dateKey),
+  pickFutureDate: async (dateKey: DateKey) => {
+    await ipcRenderer.invoke('future:add', dateKey)
+    await ipcRenderer.invoke('calendar:close')
+  },
   getHistory: () => ipcRenderer.invoke('history:get') as Promise<HistoryPayload>,
   patchSettings: (patch: Partial<Settings>) => ipcRenderer.invoke('settings:patch', patch),
   refreshBackdrop: () => ipcRenderer.invoke('backdrop:refresh'),
   openHistory: () => ipcRenderer.invoke('history:open'),
   closeHistory: () => ipcRenderer.invoke('history:close'),
+  openCalendar: () => ipcRenderer.invoke('calendar:open'),
+  closeCalendar: () => ipcRenderer.invoke('calendar:close'),
   quit: () => ipcRenderer.invoke('app:quit'),
   windowDragStart: () => ipcRenderer.invoke('window:drag-start'),
   windowDragMove: (dx: number, dy: number) => ipcRenderer.invoke('window:drag-move', dx, dy),

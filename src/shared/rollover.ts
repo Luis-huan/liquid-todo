@@ -2,7 +2,7 @@ import { addDays, isValidDateKey, toDateKey } from './date'
 import { newId } from './ids'
 import type { DateKey, Settings, StoreData, Task } from './types'
 
-export const STORE_VERSION = 3
+export const STORE_VERSION = 4
 /** today plus the six preceding days. */
 export const RETENTION_DAYS = 7
 export const MAX_TASK_LENGTH = 200
@@ -90,6 +90,7 @@ export function findTask(days: Record<DateKey, Task[]>, id: string): { dateKey: 
 
 export interface AdvanceResult {
   days: Record<DateKey, Task[]>
+  futureDates: DateKey[]
   todayKey: DateKey
   advancedDays: number
   purged: DateKey[]
@@ -106,7 +107,8 @@ export interface AdvanceResult {
 export function advanceDays(
   startingToday: DateKey,
   sourceDays: Record<DateKey, Task[]>,
-  currentKey: DateKey
+  currentKey: DateKey,
+  sourceFutureDates: DateKey[] = []
 ): AdvanceResult {
   const days: Record<DateKey, Task[]> = {}
   for (const [key, tasks] of Object.entries(sourceDays)) {
@@ -148,7 +150,14 @@ export function advanceDays(
     }
   }
 
-  return { days, todayKey, advancedDays, purged }
+  // Days the rollover has passed are no longer separate rows: they are either today or in the
+  // past, and tomorrow is derived from today rather than stored.
+  const futureDates = sourceFutureDates
+    .filter((key) => isValidDateKey(key) && key > todayKey)
+    .sort()
+    .filter((key, index, all) => index === 0 || all[index - 1] !== key)
+
+  return { days, futureDates, todayKey, advancedDays, purged }
 }
 
 /** Copies a task into the next day, remembering the day it originally slipped away from. */
@@ -213,13 +222,30 @@ export function defaultSettings(todayKey: DateKey): Settings {
     desktopLayer: 'auto',
     startAtLogin: true,
     mainWindow: { x: -1, y: -1, width: 760, height: 350 },
-    historyWindow: { x: -1, y: -1, width: 340, height: 560 }
+    historyWindow: { x: -1, y: -1, width: 340, height: 560 },
+    calendarWindow: { x: -1, y: -1, width: 300, height: 370 }
   }
 }
 
 export function createEmptyStore(todayKey: DateKey): StoreData {
-  return { version: STORE_VERSION, todayKey, days: {}, settings: defaultSettings(todayKey) }
+  return {
+    version: STORE_VERSION,
+    todayKey,
+    days: {},
+    futureDates: [],
+    settings: defaultSettings(todayKey)
+  }
 }
+
+/** Days the user picked, oldest first, without duplicates, and never in the past. */
+export function normalizeFutureDates(value: unknown, todayKey: DateKey): DateKey[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((entry): entry is DateKey => isValidDateKey(entry) && entry > todayKey)
+    .sort()
+    .filter((key, index, all) => index === 0 || all[index - 1] !== key)
+}
+
 
 /** Coerces unknown JSON into a usable store; reports whether the payload looked corrupt. */
 export function normalizeStore(raw: unknown, todayKey: DateKey): NormalizedStore {
@@ -260,13 +286,15 @@ export function normalizeStore(raw: unknown, todayKey: DateKey): NormalizedStore
     startAtLogin: typeof rawSettings.startAtLogin === 'boolean' ? rawSettings.startAtLogin : defaults.startAtLogin,
     mainWindow: storedVersion < 3 ? defaults.mainWindow : readWindow(rawSettings.mainWindow, defaults.mainWindow),
     historyWindow:
-      storedVersion < 3 ? defaults.historyWindow : readWindow(rawSettings.historyWindow, defaults.historyWindow)
+      storedVersion < 3 ? defaults.historyWindow : readWindow(rawSettings.historyWindow, defaults.historyWindow),
+    calendarWindow: readWindow(rawSettings.calendarWindow, defaults.calendarWindow)
   }
 
   const store: StoreData = {
     version: STORE_VERSION,
     todayKey: isValidDateKey(raw.todayKey) ? raw.todayKey : todayKey,
     days,
+    futureDates: normalizeFutureDates(raw.futureDates, isValidDateKey(raw.todayKey) ? raw.todayKey : todayKey),
     settings
   }
 

@@ -500,6 +500,347 @@
   background: rgba(120, 66, 12, 0.82);
 }
 
+/* ------------------------------------------------------------------ future column */
+
+.panel__list--future {
+  padding: 4px 0 12px;
+}
+
+.future-day {
+  position: relative;
+  padding: 10px 14px 12px;
+  border-top: 1px solid rgba(12, 16, 26, 0.14);
+  transition: background 140ms ease;
+}
+
+:root[data-theme='dark'] .future-day {
+  border-top-color: rgba(255, 255, 255, 0.14);
+}
+
+.future-day:first-child {
+  padding-top: 4px;
+  border-top: 0;
+}
+
+.future-day[data-over='true'] {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.future-day__head {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.future-day__label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.future-day__date {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.future-day__actions {
+  position: absolute;
+  right: -6px;
+  top: -3px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.future-day__icon {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.future-day__icon svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.future-day__icon:hover {
+  background: rgba(255, 255, 255, 0.32);
+  color: var(--text-primary);
+}
+
+:root[data-theme='dark'] .future-day__icon:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* The remove button only shows up when the row is under the pointer, so the list stays calm. */
+.future-day__icon--remove {
+  opacity: 0;
+}
+
+.future-day:hover .future-day__icon--remove {
+  opacity: 1;
+}
+
+.future-day__icon--remove:hover {
+  background: rgba(255, 69, 58, 0.18);
+  color: #ff453a;
+}
+
+.future-day__list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  min-height: 2px;
+}
+
+.future-day__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 69, 58, 0.16);
+}
+
+.future-day__confirm-text {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.future-day__confirm-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.future-day__confirm-button {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 10.5px;
+  background: rgba(255, 255, 255, 0.34);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.future-day__confirm-button[data-kind='danger'] {
+  background: rgba(255, 69, 58, 0.85);
+  color: #fff;
+}
+
+:root[data-theme='dark'] .future-day__confirm-button {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.composer--future {
+  margin: 6px 0 0;
+}
+
+/* ------------------------------------------------------------------ calendar window */
+
+.widget--calendar {
+  padding: 0;
+}
+
+.calendar {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: 24px;
+  box-shadow: var(--panel-shadow);
+  overflow: hidden;
+}
+
+.calendar__header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 16px 8px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.calendar__header:active {
+  cursor: grabbing;
+}
+
+.calendar__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--text-primary);
+}
+
+.calendar__subtitle {
+  margin: 3px 0 0;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.calendar__body {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 14px 14px;
+}
+
+.calendar__month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.calendar__month-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.calendar__nav {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.calendar__nav svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.calendar__nav:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.32);
+  color: var(--text-primary);
+}
+
+.calendar__nav:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.calendar__weekdays,
+.calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendar__weekdays span {
+  text-align: center;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.calendar__day {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  font-size: 11.5px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.calendar__day[data-in-month='false'] {
+  opacity: 0.45;
+  color: var(--text-muted);
+}
+
+.calendar__day:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+/* Already on the list: tinted, ticked, and not clickable again. */
+.calendar__day[data-block='taken'] {
+  position: relative;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.calendar__day[data-block='taken']::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 3px;
+  border-left: 1.4px solid currentColor;
+  border-bottom: 1.4px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+/* Tomorrow shares the tint but carries a ring instead of a tick. */
+.calendar__day[data-block='tomorrow'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.55);
+}
+
+.calendar__day[data-today='true'] {
+  box-shadow: inset 0 0 0 1px rgba(140, 150, 170, 0.5);
+}
+
+.calendar__day[data-block='past']:disabled {
+  opacity: 0.24;
+}
+
+.calendar__day:disabled {
+  cursor: default;
+}
+
+.calendar__hint {
+  margin: auto 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 @keyframes notice-in {
   from {
     opacity: 0;
@@ -664,7 +1005,8 @@
 }
 
 .history__empty {
-  margin: 5px 0 0;
+  /* Indented to the task text so the first letter never sits on the glass edge. */
+  margin: 5px 0 0 18px;
   font-size: 11px;
   color: var(--text-muted);
 }

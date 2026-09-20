@@ -5,6 +5,7 @@ import {
   clampTaskText,
   createEmptyStore,
   insertOpenTask,
+  normalizeFutureDates,
   normalizeStore,
   normalizeTaskOrder,
   sortTaskBands,
@@ -111,6 +112,40 @@ describe('midnight rollover', () => {
     expect(carried).toHaveLength(1)
     expect(carried[0].text).toBe('stubborn task')
     expect(carried[0].carriedFrom).toBe('2026-09-08')
+  })
+
+  it('promotes a picked day into Tomorrow and merges it with the day that became today', () => {
+    const days: Record<string, Task[]> = {
+      '2026-09-18': [task('a', 'slipped today', false, 0)],
+      '2026-09-19': [task('p', 'planned for tomorrow', false, 0)],
+      '2026-09-20': [task('x', 'picked day', false, 0)]
+    }
+
+    // One midnight: 9/18 becomes yesterday, 9/19 becomes today, 9/20 stays picked.
+    const first = advanceDays('2026-09-18', days, '2026-09-19', ['2026-09-20', '2026-09-25'])
+    expect(first.todayKey).toBe('2026-09-19')
+    expect(first.days['2026-09-19'].map((entry) => entry.text)).toEqual([
+      'slipped today',
+      'planned for tomorrow'
+    ])
+    expect(first.futureDates).toEqual(['2026-09-20', '2026-09-25'])
+
+    // A second midnight: the picked day is today, and yesterday's leftovers stay above its plan.
+    const second = advanceDays('2026-09-19', first.days, '2026-09-20', first.futureDates)
+    expect(second.days['2026-09-20'].map((entry) => entry.text)).toEqual([
+      'slipped today',
+      'planned for tomorrow',
+      'picked day'
+    ])
+    expect(second.futureDates).toEqual(['2026-09-25'])
+  })
+
+  it('drops picked days that the rollover has consumed', () => {
+    const days: Record<string, Task[]> = { '2026-09-18': [task('a', 'open', false, 0)] }
+    const result = advanceDays('2026-09-18', days, '2026-09-22', ['2026-09-19', '2026-09-21', '2026-09-24'])
+
+    expect(result.todayKey).toBe('2026-09-22')
+    expect(result.futureDates).toEqual(['2026-09-24'])
   })
 
   it('does not duplicate a task that is completed mid-way', () => {
@@ -279,9 +314,44 @@ describe('store normalisation', () => {
 
   it('creates a complete default store', () => {
     const store = createEmptyStore('2026-09-10')
-    expect(store.version).toBe(3)
+    expect(store.version).toBe(4)
     expect(store.days).toEqual({})
+    expect(store.futureDates).toEqual([])
     expect(store.settings.theme).toBe('system')
     expect(store.settings.mainWindow.width).toBe(760)
+  })
+
+  it('sorts, dedupes and drops past picked days', () => {
+    expect(
+      normalizeFutureDates(['2026-09-25', '2026-09-20', '2026-09-20', '2026-09-10', 'nope'], '2026-09-18')
+    ).toEqual(['2026-09-20', '2026-09-25'])
+    expect(normalizeFutureDates(undefined, '2026-09-18')).toEqual([])
+  })
+
+  it('reads picked days from an older store and repairs what it cannot use', () => {
+    const legacy = normalizeStore(
+      {
+        version: 3,
+        todayKey: '2026-09-18',
+        days: { '2026-09-18': [task('a', 'open', false, 0)] },
+        settings: { theme: 'dark', desktopLayer: 'auto', startAtLogin: true }
+      },
+      '2026-09-18'
+    )
+    expect(legacy.store.futureDates).toEqual([])
+    expect(legacy.store.version).toBe(4)
+    expect(legacy.store.settings.calendarWindow.width).toBe(300)
+
+    const withPicks = normalizeStore(
+      {
+        version: 4,
+        todayKey: '2026-09-18',
+        days: {},
+        futureDates: ['2026-09-21', 'junk', '2026-09-19'],
+        settings: {}
+      },
+      '2026-09-18'
+    )
+    expect(withPicks.store.futureDates).toEqual(['2026-09-19', '2026-09-21'])
   })
 })

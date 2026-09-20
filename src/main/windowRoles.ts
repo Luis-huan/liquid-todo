@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron'
 
-export type WindowRole = 'main' | 'history'
+export type WindowRole = 'main' | 'history' | 'calendar'
 
 const roles = new WeakMap<BrowserWindow, WindowRole>()
 

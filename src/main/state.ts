@@ -26,6 +26,7 @@ import type {
   DateKey,
   HistoryDay,
   HistoryPayload,
+  FutureRow,
   Settings,
   Snapshot,
   StoreData,
@@ -115,7 +116,12 @@ export class TodoState {
     if (this.data.todayKey > currentKey) return false
 
     const result = advanceDays(this.data.todayKey, this.data.days, currentKey)
-    this.data = { ...this.data, todayKey: result.todayKey, days: result.days }
+    this.data = {
+      ...this.data,
+      todayKey: result.todayKey,
+      days: result.days,
+      futureDates: result.futureDates
+    }
     this.saveNow()
     this.emit()
     return true
@@ -133,7 +139,8 @@ export class TodoState {
   }
 
   markEditable(dateKey: DateKey): boolean {
-    return dateKey === this.data.todayKey || dateKey === addDays(this.data.todayKey, 1)
+    // Today, tomorrow and any day the user put on the Future list.
+    return dateKey >= this.data.todayKey
   }
 
   private column(id: ColumnId, label: string, dateKey: DateKey, readOnly: boolean): ColumnView {
@@ -156,9 +163,9 @@ export class TodoState {
       todayKey,
       columns: [
         this.column('yesterday', 'Yesterday', addDays(todayKey, -1), true),
-        this.column('today', 'Today', todayKey, false),
-        this.column('nextDay', 'Next day', addDays(todayKey, 1), false)
+        this.column('today', 'Today', todayKey, false)
       ],
+      future: this.futureRows(),
       theme: 'light',
       desktopLayer: this.desktopLayer,
       desktopLayerRequested: this.data.settings.desktopLayer,
@@ -166,6 +173,32 @@ export class TodoState {
       settings: this.data.settings,
       notice: this.notice
     }
+  }
+
+  /**
+   * The Future column: the pinned Tomorrow row (always today + 1, whether or not it has tasks)
+   * followed by the days the user picked, oldest first.
+   */
+  private futureRows(): FutureRow[] {
+    const todayKey = this.data.todayKey
+    const tomorrowKey = addDays(todayKey, 1)
+    const row = (dateKey: DateKey, isTomorrow: boolean): FutureRow => {
+      const tasks = normalizeTaskOrder(this.data.days[dateKey] ?? [])
+      return {
+        dateKey,
+        label: formatFullDate(dateKey),
+        isTomorrow,
+        tasks,
+        total: tasks.length
+      }
+    }
+
+    const picked = this.data.futureDates
+      .filter((dateKey) => dateKey > tomorrowKey)
+      .sort()
+      .map((dateKey) => row(dateKey, false))
+
+    return [row(tomorrowKey, true), ...picked]
   }
 
   history(): HistoryPayload {
@@ -203,7 +236,37 @@ export class TodoState {
     // of landing underneath the crossed out ones. The next day's plan is a plain list.
     this.data.days[dateKey] =
       dateKey === this.data.todayKey ? insertOpenTask(tasks, task) : assignSequentialOrder([...tasks, task])
+    // Adding a task to a day that is not on the Future list puts it there, so the row appears.
+    this.registerFutureDate(dateKey)
     this.commit()
+  }
+
+  /** Days the user picked in the calendar. Today and tomorrow are not pickable. */
+  addFutureDate(dateKey: DateKey): void {
+    if (!this.registerFutureDate(dateKey)) return
+    this.commit()
+  }
+
+  /** Drops a picked day; tomorrow, today and the past are never removable. */
+  removeFutureDate(dateKey: DateKey): void {
+    const tomorrowKey = addDays(this.data.todayKey, 1)
+    if (dateKey <= tomorrowKey) return
+    if (!this.data.futureDates.includes(dateKey)) return
+
+    const futureDates = this.data.futureDates.filter((entry) => entry !== dateKey)
+    const days = { ...this.data.days }
+    delete days[dateKey]
+    this.data = { ...this.data, days, futureDates }
+    this.commit()
+  }
+
+  /** Returns true when the day was actually added to the Future list. */
+  private registerFutureDate(dateKey: DateKey): boolean {
+    const tomorrowKey = addDays(this.data.todayKey, 1)
+    if (dateKey <= tomorrowKey) return false
+    if (this.data.futureDates.includes(dateKey)) return false
+    this.data = { ...this.data, futureDates: [...this.data.futureDates, dateKey].sort() }
+    return true
   }
 
   setTaskText(id: string, text: string): void {
@@ -287,7 +350,10 @@ export class TodoState {
     this.emit()
   }
 
-  updateWindowBounds(kind: 'mainWindow' | 'historyWindow', bounds: Settings['mainWindow']): void {
+  updateWindowBounds(
+    kind: 'mainWindow' | 'historyWindow' | 'calendarWindow',
+    bounds: Settings['mainWindow']
+  ): void {
     this.data.settings = { ...this.data.settings, [kind]: bounds }
     this.scheduleSave()
   }
